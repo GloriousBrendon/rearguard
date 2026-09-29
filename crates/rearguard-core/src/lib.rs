@@ -4,6 +4,9 @@
 
 #![forbid(unsafe_code)]
 
+pub mod probe;
+pub mod secret;
+
 /// Version of the core crate, used by dependants to prove they link against it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

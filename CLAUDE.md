@@ -84,9 +84,16 @@ every target platform and give the same answer on any host.
 
 | Crate | Used by | Licence | Why |
 |-------|---------|---------|-----|
-| _none yet_ | | | |
+| `chacha20` 0.10 (features `rng`, `zeroize`) | core | MIT OR Apache-2.0 | ChaCha20 CSPRNG for probe signals (RustCrypto; what `rand` 0.10 uses); zeroizes its state on drop |
+| `hkdf` 0.13 | core | MIT OR Apache-2.0 | HKDF (RFC 5869) for the probe key hierarchy |
+| `sha2` 0.11 (feature `zeroize`) | core | MIT OR Apache-2.0 | SHA-256 for HKDF |
+| `zeroize` 1.9 | core | Apache-2.0 OR MIT | Wipes secrets on drop |
+| `criterion` 0.8 (no default features) | core (dev) | Apache-2.0 OR MIT | Benchmarks |
+| `proptest` 1.11 (feature `std` only) | core (dev) | MIT OR Apache-2.0 | Property tests |
 
-Every row must match a crate in `Cargo.lock` that passed `cargo deny`.
+Every row must match a crate in `Cargo.lock` that passed `cargo deny`. The table lists
+direct dependencies; `cargo deny` checks their transitive crates too, and every one
+resolves to an allowlisted licence.
 
 CI tooling (not crates, pinned by commit SHA in the workflow):
 `actions/cache` (MIT), `taiki-e/install-action` (Apache-2.0 OR MIT),
