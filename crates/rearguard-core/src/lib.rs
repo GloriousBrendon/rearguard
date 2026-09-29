@@ -16,8 +16,3 @@ mod tests {
         assert_eq!(VERSION, "0.0.0");
     }
 }
-
-/// DELIBERATE CLIPPY WARNING: proves CI fails on warnings. Reverted in the next commit.
-pub fn deliberate_clippy_warning() -> u32 {
-    return 1;
-}
