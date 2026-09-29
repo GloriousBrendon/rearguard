@@ -1,0 +1,26 @@
+; Engine configuration file.
+; Rearguard aim range. Pinned to Godot 4.7.2-stable, see README.md.
+
+config_version=5
+
+[application]
+
+config/name="Rearguard Aim Range"
+config/description="Single-player aim range for Rearguard Phase 1 input-probe measurements."
+run/main_scene="res://scenes/aim_range.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[physics]
+
+common/physics_ticks_per_second=120
+common/max_physics_steps_per_frame=8
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

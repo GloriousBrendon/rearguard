@@ -12,6 +12,11 @@ cargo build --workspace
 cargo test --workspace
 ```
 
+## Demo
+
+`demo/` is the Godot 4.7.2 aim range used for the Phase 1 measurements. See
+[demo/README.md](demo/README.md) for how to run it, its tests and the recording format.
+
 ## Licence
 
 All rights reserved, licence pending.

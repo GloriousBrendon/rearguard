@@ -59,7 +59,7 @@ The repository is private, on a personal GitHub account. Licence not chosen yet.
 | `crates/rearguard-sim`    | Closed test environment: synthetic players, test cheats, DR/FPR. | Never  |
 | `crates/rearguard-server` | Holds seeds, ingests untrusted telemetry, judges reactions.     | Never  |
 | `crates/rearguard-godot`  | Thin gdext binding over core (placeholder, no gdext yet).       | Only here |
-| `demo/`                   | Reserved for the Godot 4 demo project.                          | n/a    |
+| `demo/`                   | Godot 4.7.2 aim range (GDScript, no addons); see `demo/README.md`. | n/a    |
 
 Dependency direction: `sim`, `server` and `godot` depend on `core`; `core`
 depends on nothing in the workspace.
