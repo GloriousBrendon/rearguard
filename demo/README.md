@@ -42,8 +42,40 @@ godot --headless --path demo --script res://tools/summarize_recording.gd -- /tmp
 ```
 
 On a fresh checkout, run `godot --headless --path demo --import` once first so
-Godot builds its `.godot/` cache (git-ignored). CI should wrap each call in
-`timeout`.
+Godot builds its `.godot/` cache (git-ignored). CI wraps each call in `timeout`
+(see "CI").
+
+## CI
+
+The `godot tests (linux)` job in `.github/workflows/ci.yml` runs this test suite
+on every branch push, on `ubuntu-latest` only (Windows Godot runs are a later
+task). It is independent of the Rust jobs and shows as its own check.
+
+1. It restores `~/godot-dl/godot.zip` from the Actions cache. On a miss, it
+   downloads `Godot_v<version>_linux.x86_64.zip` from the official
+   `godotengine/godot-builds` release. The cache key includes the version and the
+   checksum.
+2. It checks the zip against the pinned SHA-512 with `sha512sum --check` on
+   every run, cached or not. A mismatch fails the job.
+3. It unpacks the zip, prints `godot --version`, runs the one-time `--import`
+   (`timeout 300`), then the test command above (`timeout 600`). The job fails
+   if any test fails, if a test file does not compile, or if no tests run.
+
+To bump Godot, change these values together in one pull request:
+
+1. `GODOT_VERSION` in the workflow's `godot` job, for example `4.7.3-stable`.
+2. `GODOT_ZIP_SHA512` in the same job. Copy it from the line for
+   `Godot_v<version>_linux.x86_64.zip` (the standard build, not `mono`) in that
+   release's `SHA512-SUMS.txt`:
+   `https://github.com/godotengine/godot-builds/releases/download/<version>/SHA512-SUMS.txt`.
+3. This README's "Godot version" section, and `config/features` in
+   `project.godot` if the minor version changes.
+4. Any pinned test values that depend on Godot's random number generator (for
+   example `PINNED` in `scripts/scenario_test.gd`), if the new version changes
+   them. Change these only after confirming the RNG itself changed.
+
+The new version and checksum give a new cache key, so the first run after a bump
+downloads the new zip, and later runs use the cache.
 
 Options (after `--`):
 

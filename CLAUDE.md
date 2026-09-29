@@ -80,6 +80,22 @@ runs as checks). fmt, clippy and tests run on `ubuntu-latest` and
 the Godot ban) runs on Linux only, because both evaluate the lockfile graph for
 every target platform and give the same answer on any host.
 
+The `godot tests (linux)` job runs the demo's GDScript suite headless on
+`ubuntu-latest`, separately from the Rust jobs. It uses Godot 4.7.2-stable from
+the official `godot-builds` release. The version (`GODOT_VERSION`) and the zip's
+SHA-512 (`GODOT_ZIP_SHA512`) are pinned in the workflow, and the checksum is
+verified on every run, so a mismatch fails the job. The zip is cached, keyed on
+both values. To run it locally, use the 4.7.2 binary as `godot`:
+
+```sh
+godot --headless --path demo --import          # once per fresh checkout
+godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
+```
+
+To bump Godot, change `GODOT_VERSION` and `GODOT_ZIP_SHA512` together; the
+checksum comes from the release's `SHA512-SUMS.txt`. The full steps are in
+`demo/README.md`, under "CI".
+
 ## Third-party dependencies
 
 | Crate | Used by | Licence | Why |
@@ -97,4 +113,6 @@ resolves to an allowlisted licence.
 
 CI tooling (not crates, pinned by commit SHA in the workflow):
 `actions/cache` (MIT), `taiki-e/install-action` (Apache-2.0 OR MIT),
-`cargo-deny` (Apache-2.0 OR MIT). Keep CI tooling permissive too.
+`cargo-deny` (Apache-2.0 OR MIT). The Godot job downloads the Godot 4.7.2-stable
+editor binary (MIT), pinned by SHA-512 rather than by commit. Keep CI tooling
+permissive too.

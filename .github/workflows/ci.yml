@@ -56,3 +56,41 @@ jobs:
         run: cargo deny --locked check
       - name: No Godot crates outside rearguard-godot
         run: scripts/check-no-godot.sh
+
+  # Headless GDScript tests for demo/. Linux only (Windows Godot runs are task 3.4).
+  # Independent of the Rust jobs. To bump Godot, change both values below together
+  # (see demo/README.md, "CI"); the cache key includes them, so a bump downloads afresh.
+  godot:
+    name: godot tests (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GODOT_VERSION: 4.7.2-stable
+      # SHA-512 of Godot_v${GODOT_VERSION}_linux.x86_64.zip, from the release's SHA512-SUMS.txt.
+      GODOT_ZIP_SHA512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Godot download
+        id: godot-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/godot-dl
+          key: godot-${{ runner.os }}-${{ env.GODOT_VERSION }}-${{ env.GODOT_ZIP_SHA512 }}
+      - name: Download Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot-dl
+          curl -sSfL --retry 3 -o ~/godot-dl/godot.zip \
+            "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+      # Checked on every run, cache hit or not; a mismatch fails the job.
+      - name: Verify checksum and unpack
+        run: |
+          echo "${GODOT_ZIP_SHA512}  ${HOME}/godot-dl/godot.zip" | sha512sum --check --strict
+          mkdir -p ~/godot
+          unzip -q -o ~/godot-dl/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}_linux.x86_64 ~/godot/godot
+          ~/godot/godot --version
+      - name: Import project
+        run: timeout 300 ~/godot/godot --headless --path demo --import
+      - name: Run tests
+        run: timeout 600 ~/godot/godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
