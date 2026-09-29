@@ -1,0 +1,51 @@
+# cargo-deny policy. Every dependency addition must pass `cargo deny --locked check`.
+# No `targets` are set, so the graph covers every platform (Linux and Windows alike).
+
+[graph]
+all-features = true
+
+[advisories]
+# RustSec advisory database. Vulnerabilities and unmaintained crates fail the check.
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Permissive only until decision D3 (project licence) is made. Copyleft (GPL, LGPL,
+# AGPL, MPL, EUPL, ...) and unknown or unlicensed crates fail the check.
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.93
+# Allow-list entries that no current crate uses are fine; the list is a policy.
+unused-allowed-license = "allow"
+exceptions = []
+# Licences reach users through dev and build dependencies too (vendored sources,
+# test binaries), so check them, not just runtime dependencies.
+include-dev = true
+include-build = true
+
+[licenses.private]
+# Workspace crates are `publish = false` and carry no licence yet (D3 pending).
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+# Godot crates are banned outside rearguard-godot by scripts/check-no-godot.sh,
+# which also catches transitive paths (e.g. core -> rearguard-godot -> godot).
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

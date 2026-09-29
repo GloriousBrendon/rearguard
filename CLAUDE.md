@@ -36,7 +36,15 @@ The repository is private, on a personal GitHub account. Licence not chosen yet.
   then, do not introduce raw seed handling).
 - Test cheats run only inside Rearguard's own test environment (`rearguard-sim`).
   Nothing aimed at live servers or other people's games.
-- Add dependencies sparingly; record each one and its licence in the table below.
+- Add dependencies sparingly. **Every dependency addition (normal, dev or build)
+  must pass `cargo deny --locked check` and be listed in the dependency table
+  below with its licence.** Never weaken `deny.toml` to make a crate pass; a
+  licence exception or advisory ignore needs an explicit decision, recorded here.
+- Licences are permissive-only until decision D3 (leading option: Apache-2.0).
+  The allowlist lives in `deny.toml`; copyleft and unknown licences fail.
+- Godot crates (`godot`, `godot-*`, `gdext*`, `gdextension*`, `gdnative*`) and
+  `rearguard-godot` itself must never enter the graph of core, sim or server,
+  even transitively. Enforced by `scripts/check-no-godot.sh`.
 - Tests live alongside the code. `cargo fmt`, clippy with warnings as errors, and
   `cargo test` must pass in CI on Linux and Windows.
 - Do not add a LICENSE file. The root README states "All rights reserved,
@@ -62,13 +70,24 @@ depends on nothing in the workspace.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
+cargo deny --locked check        # cargo install cargo-deny --locked (CI: 0.20.2)
+scripts/check-no-godot.sh
 ```
 
-CI: `.github/workflows/ci.yml`, matrix `ubuntu-latest` and `windows-latest`, on
-every branch push (so pull requests show the runs as checks).
+CI: `.github/workflows/ci.yml`, on every branch push (so pull requests show the
+runs as checks). fmt, clippy and tests run on `ubuntu-latest` and
+`windows-latest` with build caching; the dependency policy job (cargo-deny plus
+the Godot ban) runs on Linux only, because both evaluate the lockfile graph for
+every target platform and give the same answer on any host.
 
 ## Third-party dependencies
 
 | Crate | Used by | Licence | Why |
 |-------|---------|---------|-----|
 | _none yet_ | | | |
+
+Every row must match a crate in `Cargo.lock` that passed `cargo deny`.
+
+CI tooling (not crates, pinned by commit SHA in the workflow):
+`actions/cache` (MIT), `taiki-e/install-action` (Apache-2.0 OR MIT),
+`cargo-deny` (Apache-2.0 OR MIT). Keep CI tooling permissive too.
