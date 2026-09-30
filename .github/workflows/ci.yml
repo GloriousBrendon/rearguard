@@ -115,9 +115,10 @@ jobs:
         run: |
           rm -f target/debug/librearguard_godot.so
           timeout 300 ~/godot/godot --headless --path demo --import
-      # demo/rearguard.gdextension loads target/debug/librearguard_godot.so.
-      - name: Build the Godot extension
-        run: cargo build --locked -p rearguard-godot
+      # demo/rearguard.gdextension loads target/debug/librearguard_godot.so; the live-loop
+      # tests (demo/scripts/live_loop_test.gd) run target/debug/rearguard-server.
+      - name: Build the Godot extension and the server
+        run: cargo build --locked -p rearguard-godot -p rearguard-server
       - name: Run tests
         # Extension tests fail (instead of skipping) if the library did not load.
         env:

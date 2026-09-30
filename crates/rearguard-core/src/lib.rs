@@ -9,6 +9,7 @@ pub mod probe;
 pub mod protocol;
 pub mod secret;
 pub mod telemetry;
+pub mod uplink;
 
 /// Version of the core crate, used by dependants to prove they link against it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

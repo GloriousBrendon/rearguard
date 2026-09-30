@@ -27,9 +27,10 @@ exactly this version. `project.godot` sets `config/features` to `4.7`.
 
 All commands are run from the repository root; `godot` is the 4.7.2 editor binary.
 
-The input probe comes from the Rust extension (`crates/rearguard-godot`), so build
-it first. Without it the range still runs, but without the probe (identity hooks),
-and Godot logs one "Can't open dynamic library" error.
+The input probe, the telemetry file and the server link all come from the Rust
+extension (`crates/rearguard-godot`), so build it first. Without it the range still
+runs, but with no probe (identity hooks), no recording and no server, and Godot logs
+one "Can't open dynamic library" error.
 
 ```sh
 # Fresh checkout only: import BEFORE the first build (Godot 4.7.2 crashes on shutdown
@@ -44,6 +45,10 @@ godot --path demo -- --scenario flick --seed 7
 
 # Scripted bot, headless, faster than real time, then quit.
 godot --headless --path demo --fixed-fps 120 -- --bot --scenario spray --seed 7 --duration 20 --out /tmp/spray.jsonl
+
+# Live loop: a Rearguard server issues the seed and returns a verdict (see "Live loop").
+cargo run -p rearguard-server -- run --config server.json    # in another terminal
+godot --path demo -- --scenario flick --server 127.0.0.1:7461
 
 # Tests (exit code 0 on success, 1 on any failure). The extension tests are skipped
 # if the library is not built, unless REARGUARD_REQUIRE_EXTENSION=1 (as in CI).
@@ -74,7 +79,8 @@ task). It is independent of the Rust jobs and shows as its own check.
    if any test fails, if a test file does not compile, or if no tests run.
 
 The job also installs the pinned Rust toolchain. Between the import and the tests it
-builds the extension (`cargo build --locked -p rearguard-godot`). It builds after the
+builds the extension and the server (`cargo build --locked -p rearguard-godot -p
+rearguard-server`); the live-loop tests start that server binary. It builds after the
 import because of the first-import crash described in `crates/rearguard-godot/README.md`,
 and removes any cached library before importing for the same reason. It runs the tests
 with `REARGUARD_REQUIRE_EXTENSION=1`, so the extension tests fail if the library does
@@ -109,11 +115,13 @@ Options (after `--`):
 | `--out PATH` | `user://recordings/<scenario>-seed<N>-<time>.jsonl` | Recording file |
 | `--quit` / `--no-quit` | off | Quit when the scenario ends |
 | `--no-probe` | probe on | Run without the input-probe drift (identity hooks) |
-| `--probe-seed-file PATH` | none | Probe seed file (64 hex digits), created with a fresh OS-random seed if missing. Without it, a random seed is kept in memory only, so the run can never be analysed |
-| `--probe-amplitude-ppm N` | `5000` | Drift amplitude, 0 to 20000 (0.5% default, 2% maximum) |
-| `--telemetry PATH` | none | Also write the session in the `rearguard.telemetry` schema (what a real client streams), through the extension |
+| `--server HOST:PORT` | none | Stream the session to a Rearguard server (loopback) and take the drift's seed from it; see "Live loop" |
+| `--probe-seed-file PATH` | none | Offline only: probe seed file (64 hex digits), created with a fresh OS-random seed if missing. Without it (and without a server), a random seed is kept in memory only, so the run can never be analysed |
+| `--probe-amplitude-ppm N` | `5000` | Offline only: drift amplitude, 0 to 20000 (0.5% default, 2% maximum). With a server, the server sets it |
+| `--no-record` | recording on | Do not write the telemetry file |
+| `--frame-stats PATH` | none | Write frame-time statistics (p50, p99, mean) for the run, and uplink counters in debug builds, as JSON |
 
-The seed file is the server's secret in this offline setting. Keep it apart from the
+Offline, the seed file stands in for the server's secret. Keep it apart from the
 recordings; it is never copied into them.
 
 `user://` is `~/.local/share/godot/app_userdata/Rearguard Aim Range/` on Linux and
@@ -160,7 +168,9 @@ With the probe on, `scripts/probe_hooks.gd` installs the drift on both hooks. Ea
 hook multiplies the angle change by the extension's multiplier:
 `RearguardProbe.sensitivity_multiplier(ts)` for looks, and `recoil_scale(ts)` for
 recoil. `ts` is the event's timestamp, which `RangeSession` puts in `AimModel.event_us`
-before each `apply_*` call. The probe's tick 0 is the session's start (`probe_start_us`
+before each `apply_*` call. The hooks read it from the model's small `EventClock` object,
+never from the model itself: a hook that captured the model it is stored on would be a
+reference cycle, and the model would leak at exit. The probe's tick 0 is the session's start (`probe_start_us`
 in the header), and an event's probe tick is `(ts_us - probe_start_us) / 1000`. All of
 the drift maths is in `rearguard-core`.
 
@@ -171,8 +181,14 @@ mouse down (+dy) looks down.
 
 ## Recording format
 
-A recording is JSON Lines: one JSON object per line, in UTF-8, with LF line
-endings. Every record has `type`, `ts_us`, `frame` and `tick`.
+A recording is client telemetry in the **`rearguard.telemetry` version 1** schema
+(`rearguard_core::telemetry`). This is exactly what a real client streams to the server,
+so a recorded session goes straight into the detector. It is JSON Lines: one object per
+line, UTF-8, LF line endings. The Rust extension writes it (`RearguardRecorder`, via
+`scripts/telemetry_out.gd`), so its floats are exact. It replaces the task-1.4
+`rearguard.aimrange.recording` format.
+
+Every record has `type`, `ts_us`, `frame` and `tick`:
 
 - `ts_us` is `Time.get_ticks_usec()`: microseconds since the engine started, from a
   monotonic clock (`CLOCK_MONOTONIC_RAW` on Linux, `QueryPerformanceCounter` on
@@ -184,43 +200,97 @@ endings. Every record has `type`, `ts_us`, `frame` and `tick`.
 
 | `type` | Written when | Extra fields |
 |--------|--------------|--------------|
-| `header` | First line | `format` (`"rearguard.aimrange.recording"`), `version` (2), `scenario`, `scenario_seed`, `duration_s`, `physics_hz`, `deg_per_count`, `recoil_pattern`, `target_distance_m`, `target_radius_m`, `source` (`human`/`bot`), `bot_seed`, `godot_version`, `os`, `display_driver`, `accumulated_input`, `delta_source`, `clock`, `probe_enabled`, `probe_amplitude_ppm`, `probe_start_us`, `probe_seed` (`"file"`, `"random"` or `"none"`: where the seed came from, never the seed) |
+| `header` | First line | `format` (`"rearguard.telemetry"`), `version` (1), `match_id` (from the server, or `"aimrange-local"`), `player_id`, `source` (`"client"`), `probe_start_us` (the timestamp of probe tick 0: the session start), `deg_per_count`, `physics_hz`, `scenario`, `scenario_seed`, `duration_s`, `recoil_pattern`, `target_distance_m`, `target_radius_m` |
 | `move` | Every raw mouse motion event | `dx`, `dy`: raw counts before sensitivity. `yaw`, `pitch`: resulting view in degrees |
-| `button` | Fire button press or release | `button` (`"fire"`), `pressed` |
+| `button` | Fire button press or release | `pressed` |
 | `fire` | Every shot | `shot` (run-wide index), `burst_shot`, `yaw`, `pitch` (view when fired, before recoil), `target`, `target_yaw`, `target_pitch`, `hit` |
 | `recoil` | After each shot with a kick | `shot`, `burst_shot`, `kick_yaw`, `kick_pitch` (nominal pattern kick), `yaw`, `pitch` (view after recoil) |
 | `target` | Flick or spray target appears | `target`, `target_yaw`, `target_pitch` |
 | `end` | Last line | `shots`, `hits`, `complete` (false if the window was closed early) |
 
+The runtime details the schema does not carry are written next to the recording as
+`<recording>.env.json`:
+- `source` (`human` or `bot`), `bot_seed`, `godot_version`, `os`, `display_driver`,
+  `accumulated_input`, `delta_source`, `clock`, `debug_build`;
+- the probe: `probe_enabled`, `probe_amplitude_ppm`, `probe_start_us`, and
+  `probe_seed`: where the seed came from (`"server"`, `"file"`, `"random"` or
+  `"none"`), never the seed;
+- `server` and `server_status`.
+
 Replaying a recording gives back every view angle exactly:
 - start at yaw 0 and pitch 0;
-- for each `move`, add `-dx × deg_per_count` and `-dy × deg_per_count`;
-- for each `recoil`, add the kick.
+- for each `move`, add `-dx × deg_per_count × m` and `-dy × deg_per_count × m`;
+- for each `recoil`, add the kick × `r`.
 
-With the probe on (`probe_enabled`), multiply each `move`'s change by the sensitivity
-multiplier, and each kick by the recoil scale, at that record's `ts_us`. That needs the
-seed, so only the holder of the seed file can replay a probed recording.
+Here `m` and `r` are the probe's sensitivity multiplier and recoil scale at that
+record's `ts_us`, and are 1 with the probe off. Computing them needs the seed, so only
+its holder (the server, or the holder of the seed file) can replay a probed recording.
+The server does exactly this, and counts every mismatch. The tests check the replay, and
+`crates/rearguard-core/tests/aimrange_fixture.rs` feeds a recorded session to the
+detector with zero mismatches.
 
-The tests check this, and so did a replay of the bot's output files in a correctly
-rounded parser. Version 1 (task 1.4) had no probe fields; a version-1 recording replays
-with identity multipliers.
-
-`--telemetry` writes a second file in the `rearguard.telemetry` v1 schema
-(`rearguard_core::telemetry`, what a real client streams). It has the same events, with
-`match_id` `"aimrange-local"`, `player_id` 0 and `source` `"client"`. The extension
-writes it, so its floats are exact.
-
-Precision: floats are written at full round-trip precision, and a correctly
-rounded parser reads them back bit for bit; this was checked with Python's parser
-on 200,000 values. In Rust, `serde_json` needs its `float_roundtrip` feature for
-this, because its default float parsing can be off in the last bit. **Godot's own `JSON.parse_string` and
-`String.to_float` are not correctly rounded**, and about 14% of doubles come back
-one ulp off. So the tests compare in-memory records for exactness and use parsed
-text only for structure.
+Precision: the extension writes floats at full round-trip precision, and a correctly
+rounded parser reads them back bit for bit. (In Rust, `serde_json` needs its
+`float_roundtrip` feature for this, because its default float parsing can be off in the
+last bit.) **Godot's own `JSON.parse_string` and `String.to_float` are not correctly
+rounded**, and about 14% of doubles come back one ulp off. So the GDScript tests compare
+in-memory records for exactness, and use parsed text only for structure or with a 1e-9
+tolerance.
 
 The file is flushed once per second of scenario time. If the process is killed,
 everything but a possibly truncated final line is valid, so discard a trailing
 line that does not parse.
+
+## Live loop
+
+With `--server HOST:PORT`, the aim range streams its telemetry to a Rearguard server
+(`crates/rearguard-server`, loopback only until task 3.3) as it plays:
+
+1. **At the start of the run,** it connects and opens a session. The server's
+   `Welcome` carries the session's epoch seed and amplitude. The seed goes straight
+   from the extension's `RearguardClient` to its `RearguardProbe`, inside Rust, and
+   never reaches GDScript, the screen, the recording or a log. The header takes the
+   server's `match_id` and `player_id`.
+2. **While playing,** every record goes both to the file and to the uplink
+   (`rearguard_core::uplink`). The uplink only queues it; a worker thread batches
+   records into numbered chunks and sends them, so the game never waits on the
+   network.
+3. **At the end,** the aim range ends the server session and waits for the verdict,
+   up to 10 s, before completing. It then prints one line: the session, its status,
+   and in debug builds the verdict's score and whether it was flagged. The server
+   stores the evidence (`rearguard-server verdict --db ... --session ID`).
+
+**When the server is unreachable or goes away** (also tested in
+`scripts/live_loop_test.gd` and `crates/rearguard-server/tests/uplink.rs`):
+
+- **Unreachable at the start:** the run goes offline. The drift is applied from a
+  local random seed, so play is unchanged. The recording is complete and there is no
+  verdict: `aim_range: no server session (unreachable)`.
+- **The connection drops mid-session:** the game carries on and is never blocked.
+  The uplink keeps every unacknowledged chunk (up to 16 MiB) and tries to resume
+  every 0.5 s. If the server resumes the session, the uplink resends what the server
+  lacks, and nothing is lost.
+- **The session is lost:** this happens if the server no longer knows the session
+  (it was closed as abandoned, or the server restarted), if 30 s pass without a
+  connection, or if the buffer fills. Records are then dropped from the uplink only;
+  the local recording stays complete. The run ends with
+  `aim_range: server session N: lost: ... , no final verdict` (or `reconnecting` if it
+  ends first).
+
+**Developer overlay:**
+- It appears only in debug builds (`OS.is_debug_build()`: the editor, `godot` runs
+  and debug exports). Its data accessors (`RearguardClient.verdict()`, `stats()` and
+  `request_verdict()`) exist only in debug builds of the extension, so release builds
+  have neither.
+- It shows the server status, session and match ids, the probe's amplitude and seed
+  *source*, uplink traffic and bytes per minute, and the live verdict (requested
+  every 5 s) with both statistics.
+- It also shows recent frame times.
+- It never shows seed material.
+
+**Cost:** frame-time cost (p50 and p99, probe and recorder on versus off) and
+bandwidth per minute of play are in `docs/results/live-loop-1.7.md`, measured with
+`scripts/measure-live-loop.sh`.
 
 ## Raw input path
 
@@ -319,11 +389,13 @@ With accelerated input, the fast pass sums higher and fractional deltas appear.
 | `scripts/range_session.gd` | One run: weapon, targets, scoring, recording. No scene dependency |
 | `scripts/aim_model.gd` | View angle, `apply_sensitivity`, `apply_recoil`, hooks |
 | `scripts/scenario.gd` | Seeded scenario generation and the fixed recoil pattern |
-| `scripts/recorder.gd` | JSON Lines writer (file or memory) and reader |
+| `scripts/recorder.gd` | In-memory log of the session's telemetry records (tests), and a telemetry file reader |
+| `scripts/telemetry_out.gd` | Forwards records to the extension's file writer or server client |
+| `scripts/dev_overlay.gd` | Developer overlay (debug builds only) |
 | `scripts/scripted_bot.gd` | Scripted synthetic player for headless runs |
 | `scripts/probe_hooks.gd` | Installs the extension's drift multipliers on the two aim hooks |
 | `rearguard.gdextension` | Loads the Rust extension (`crates/rearguard-godot`) from `../target/` |
-| `scripts/*_test.gd` | Tests, one file beside each script; `probe_binding_test.gd` checks the extension |
+| `scripts/*_test.gd` | Tests, one file beside each script; `probe_binding_test.gd` checks the extension, `live_loop_test.gd` runs against a real server (`target/debug/rearguard-server`) |
 | `tests/` | Test runner and base class; `probe_golden.json` holds the core golden vectors the extension must reproduce |
 | `tools/summarize_recording.gd` | Input statistics for recordings |
 

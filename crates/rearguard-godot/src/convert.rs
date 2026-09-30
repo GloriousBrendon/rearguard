@@ -185,6 +185,133 @@ pub(crate) fn header_from(get: impl Fn(&str) -> Option<Field>) -> Option<Header>
     })
 }
 
+/// Builders for telemetry records from GDScript arguments. `None` for a negative count or
+/// timestamp, or an index too large for its field.
+pub(crate) mod records {
+    use rearguard_core::telemetry::{Button, End, Fire, Move, Recoil, Record, Target};
+
+    use super::{to_u32, to_u64};
+
+    pub(crate) fn movement(
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        dx: f64,
+        dy: f64,
+        yaw: f64,
+        pitch: f64,
+    ) -> Option<Record> {
+        Some(Record::Move(Move {
+            ts_us: to_u64(ts_us)?,
+            frame: to_u64(frame)?,
+            tick: to_u64(tick)?,
+            dx,
+            dy,
+            yaw,
+            pitch,
+        }))
+    }
+
+    pub(crate) fn button(ts_us: i64, frame: i64, tick: i64, pressed: bool) -> Option<Record> {
+        Some(Record::Button(Button {
+            ts_us: to_u64(ts_us)?,
+            frame: to_u64(frame)?,
+            tick: to_u64(tick)?,
+            pressed,
+        }))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn fire(
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        shot: i64,
+        burst_shot: i64,
+        yaw: f64,
+        pitch: f64,
+        target: i64,
+        target_yaw: f64,
+        target_pitch: f64,
+        hit: bool,
+    ) -> Option<Record> {
+        Some(Record::Fire(Fire {
+            ts_us: to_u64(ts_us)?,
+            frame: to_u64(frame)?,
+            tick: to_u64(tick)?,
+            shot: to_u64(shot)?,
+            burst_shot: to_u32(burst_shot)?,
+            yaw,
+            pitch,
+            target: to_u64(target)?,
+            target_yaw,
+            target_pitch,
+            hit,
+        }))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn recoil(
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        shot: i64,
+        burst_shot: i64,
+        kick_yaw: f64,
+        kick_pitch: f64,
+        yaw: f64,
+        pitch: f64,
+    ) -> Option<Record> {
+        Some(Record::Recoil(Recoil {
+            ts_us: to_u64(ts_us)?,
+            frame: to_u64(frame)?,
+            tick: to_u64(tick)?,
+            shot: to_u64(shot)?,
+            burst_shot: to_u32(burst_shot)?,
+            kick_yaw,
+            kick_pitch,
+            yaw,
+            pitch,
+        }))
+    }
+
+    pub(crate) fn target(
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        target: i64,
+        target_yaw: f64,
+        target_pitch: f64,
+    ) -> Option<Record> {
+        Some(Record::Target(Target {
+            ts_us: to_u64(ts_us)?,
+            frame: to_u64(frame)?,
+            tick: to_u64(tick)?,
+            target: to_u64(target)?,
+            target_yaw,
+            target_pitch,
+        }))
+    }
+
+    pub(crate) fn end(
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        shots: i64,
+        hits: i64,
+        complete: bool,
+    ) -> Option<Record> {
+        Some(Record::End(End {
+            ts_us: to_u64(ts_us)?,
+            frame: to_u64(frame)?,
+            tick: to_u64(tick)?,
+            shots: to_u64(shots)?,
+            hits: to_u64(hits)?,
+            complete,
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -251,6 +378,15 @@ mod tests {
         let a = load_or_create_seed(&SeedSource::Random, true).unwrap();
         let b = load_or_create_seed(&SeedSource::Random, true).unwrap();
         assert_ne!(a.expose_secret(), b.expose_secret());
+    }
+
+    #[test]
+    fn record_builders_refuse_negative_fields() {
+        assert!(records::movement(1, 2, 3, -1.0, 0.5, 0.0, 0.0).is_some());
+        assert!(records::movement(-1, 2, 3, 0.0, 0.0, 0.0, 0.0).is_none());
+        assert!(records::fire(1, 1, 1, 0, 1 << 33, 0.0, 0.0, 0, 0.0, 0.0, true).is_none());
+        assert!(records::end(1, 1, 1, 3, -2, true).is_none());
+        assert!(records::target(1, 1, 1, 4, 1.0, 2.0).is_some());
     }
 
     #[test]

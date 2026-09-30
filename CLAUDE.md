@@ -102,7 +102,7 @@ use the 4.7.2 binary as `godot`:
 
 ```sh
 godot --headless --path demo --import          # once per fresh checkout, BEFORE the build
-cargo build -p rearguard-godot                 # the GDExtension library, in target/debug
+cargo build -p rearguard-godot -p rearguard-server   # the GDExtension library and the server the live-loop tests run
 REARGUARD_REQUIRE_EXTENSION=1 godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
 ```
 

@@ -1,14 +1,19 @@
 //! Rearguard Godot binding: a thin gdext layer over `rearguard-core`.
 //!
-//! Two GDScript classes:
+//! Three GDScript classes:
 //!
 //! - [`RearguardProbe`]: starts a probe session from seed material and answers "what is
 //!   the sensitivity multiplier / recoil scale at this event timestamp?".
 //! - [`RearguardRecorder`]: writes client telemetry in the `rearguard.telemetry` schema.
+//! - [`RearguardClient`]: streams the same telemetry to a Rearguard server
+//!   (`rearguard_core::uplink`) and hands the server-issued seed to a probe.
 //!
-//! The binding only converts between Godot and Rust types. All maths (the drift, the
-//! probe-tick rule, serialisation) lives in `rearguard-core`. Seed material stays on the
-//! Rust side, in types that redact themselves and are wiped on drop.
+//! The binding only converts between Godot and Rust types. All maths, serialisation and
+//! networking live in `rearguard-core`. Seed material stays on the Rust side, in types
+//! that redact themselves and are wiped on drop; it never reaches GDScript.
+//!
+//! Items marked "debug builds only" exist only when the library is built without
+//! `--release` (the developer overlay's data).
 //!
 //! This is the only crate allowed to depend on Godot (gdext, MPL-2.0; decision D10).
 //! Its one `unsafe` is the `unsafe impl ExtensionLibrary` gdext requires for the entry
@@ -18,13 +23,17 @@ mod convert;
 
 use std::fs::File;
 use std::io::{BufWriter, Write as _};
+use std::net::SocketAddr;
 
 use godot::global::Error;
 use godot::prelude::*;
 use rearguard_core::probe::{Amplitude, EpochSeed, ProbeConfig, ProbeGenerator, Stream};
 use rearguard_core::telemetry::{self, Record};
+use rearguard_core::uplink::{SessionInfo, Uplink, UplinkConfig, UplinkStatus};
 
-use crate::convert::{Field, SeedSource, header_from, load_or_create_seed, to_u32, to_u64};
+use crate::convert::{
+    Field, SeedSource, header_from, load_or_create_seed, records, to_u32, to_u64,
+};
 
 struct RearguardExtension;
 
@@ -45,7 +54,7 @@ struct Session {
 ///
 /// ```gdscript
 /// var probe := RearguardProbe.new()
-/// probe.start_session_from_file(path, true, 5000, start_us)
+/// probe.start_session_from_client(client, start_us)   # or from a seed file
 /// var k := probe.sensitivity_multiplier(event_ts_us)
 /// ```
 #[derive(GodotClass)]
@@ -111,10 +120,9 @@ impl RearguardProbe {
     #[constant]
     const STREAM_RECOIL: i64 = 1;
 
-    /// Starts a session from a 32-byte epoch seed, as a server would deliver it.
-    /// `probe_start_us` is the client timestamp of probe tick 0. The bytes are copied
-    /// into a wiped-on-drop secret; the caller's array cannot be wiped from here, so
-    /// prefer [`Self::start_session_from_file`] or [`Self::start_session_random`].
+    /// Starts a session from a 32-byte epoch seed. The bytes are copied into a
+    /// wiped-on-drop secret; the caller's array cannot be wiped from here, so prefer
+    /// the file, random or client sources.
     #[func]
     fn start_session(
         &mut self,
@@ -130,9 +138,7 @@ impl RearguardProbe {
     }
 
     /// Starts a session from a seed file (64 hex digits). With `create_if_missing`, a
-    /// missing file is created with a fresh seed from the operating system's CSPRNG,
-    /// readable only by its owner where the platform supports it. The seed never
-    /// passes through GDScript.
+    /// missing file is created with a fresh seed from the operating system's CSPRNG.
     #[func]
     fn start_session_from_file(
         &mut self,
@@ -147,14 +153,33 @@ impl RearguardProbe {
         }
     }
 
-    /// Starts a session from a fresh random seed held only in memory: the drift is
-    /// applied but can never be analysed afterwards.
+    /// Starts a session from a fresh random seed held only in memory.
     #[func]
     fn start_session_random(&mut self, amplitude_ppm: i64, probe_start_us: i64) -> Error {
         match load_or_create_seed(&SeedSource::Random, true) {
             Ok(seed) => self.start(&seed, amplitude_ppm, probe_start_us),
             Err(e) => e.to_godot(),
         }
+    }
+
+    /// Starts a session with the seed and amplitude a connected [`RearguardClient`]
+    /// received from the server. The seed moves from client to probe inside Rust; it can
+    /// be taken once.
+    #[func]
+    fn start_session_from_client(
+        &mut self,
+        mut client: Gd<RearguardClient>,
+        probe_start_us: i64,
+    ) -> Error {
+        let mut c = client.bind_mut();
+        let (Some(seed), Some(amplitude)) = (
+            c.seed.take(),
+            c.info.as_ref().map(|i| i64::from(i.amplitude_ppm)),
+        ) else {
+            return Error::ERR_UNCONFIGURED;
+        };
+        drop(c);
+        self.start(&seed, amplitude, probe_start_us)
     }
 
     /// Ends the session; the seed material is wiped.
@@ -186,7 +211,7 @@ impl RearguardProbe {
     }
 
     /// Sensitivity multiplier for an event at client timestamp `ts_us` (1.0 without a
-    /// session). Multiply the view change of that event's raw delta by it.
+    /// session).
     #[func]
     fn sensitivity_multiplier(&mut self, ts_us: i64) -> f64 {
         self.multiplier_at_ts(Stream::Sensitivity, ts_us)
@@ -230,6 +255,22 @@ impl RearguardProbe {
     }
 }
 
+/// Builds a telemetry header from a GDScript dictionary.
+fn header_from_dictionary(header: &VarDictionary) -> Option<telemetry::Header> {
+    let field = |key: &str| -> Option<Field> {
+        let v = header.get(&key.to_variant())?;
+        match v.get_type() {
+            VariantType::INT => Some(Field::Int(v.to::<i64>())),
+            VariantType::FLOAT => Some(Field::Float(v.to::<f64>())),
+            VariantType::STRING | VariantType::STRING_NAME => {
+                Some(Field::Str(v.to::<GString>().to_string()))
+            }
+            _ => None,
+        }
+    };
+    header_from(field)
+}
+
 /// Writes client telemetry (`rearguard.telemetry`, JSON Lines) with exact floats.
 ///
 /// Open with a header dictionary, record events in order, then close. Every
@@ -266,18 +307,7 @@ impl RearguardRecorder {
     /// fills in.
     #[func]
     fn open(&mut self, path: GString, header: VarDictionary) -> Error {
-        let field = |key: &str| -> Option<Field> {
-            let v = header.get(&key.to_variant())?;
-            match v.get_type() {
-                VariantType::INT => Some(Field::Int(v.to::<i64>())),
-                VariantType::FLOAT => Some(Field::Float(v.to::<f64>())),
-                VariantType::STRING | VariantType::STRING_NAME => {
-                    Some(Field::Str(v.to::<GString>().to_string()))
-                }
-                _ => None,
-            }
-        };
-        let Some(header) = header_from(field) else {
+        let Some(header) = header_from_dictionary(&header) else {
             return Error::ERR_INVALID_PARAMETER;
         };
         let file = match File::create(path.to_string()) {
@@ -312,32 +342,13 @@ impl RearguardRecorder {
         yaw: f64,
         pitch: f64,
     ) -> bool {
-        let r = (|| {
-            Some(Record::Move(telemetry::Move {
-                ts_us: to_u64(ts_us)?,
-                frame: to_u64(frame)?,
-                tick: to_u64(tick)?,
-                dx,
-                dy,
-                yaw,
-                pitch,
-            }))
-        })();
-        self.write(r)
+        self.write(records::movement(ts_us, frame, tick, dx, dy, yaw, pitch))
     }
 
     /// Fire button pressed or released.
     #[func]
     fn record_button(&mut self, ts_us: i64, frame: i64, tick: i64, pressed: bool) -> bool {
-        let r = (|| {
-            Some(Record::Button(telemetry::Button {
-                ts_us: to_u64(ts_us)?,
-                frame: to_u64(frame)?,
-                tick: to_u64(tick)?,
-                pressed,
-            }))
-        })();
-        self.write(r)
+        self.write(records::button(ts_us, frame, tick, pressed))
     }
 
     /// One shot.
@@ -357,22 +368,19 @@ impl RearguardRecorder {
         target_pitch: f64,
         hit: bool,
     ) -> bool {
-        let r = (|| {
-            Some(Record::Fire(telemetry::Fire {
-                ts_us: to_u64(ts_us)?,
-                frame: to_u64(frame)?,
-                tick: to_u64(tick)?,
-                shot: to_u64(shot)?,
-                burst_shot: to_u32(burst_shot)?,
-                yaw,
-                pitch,
-                target: to_u64(target)?,
-                target_yaw,
-                target_pitch,
-                hit,
-            }))
-        })();
-        self.write(r)
+        self.write(records::fire(
+            ts_us,
+            frame,
+            tick,
+            shot,
+            burst_shot,
+            yaw,
+            pitch,
+            target,
+            target_yaw,
+            target_pitch,
+            hit,
+        ))
     }
 
     /// Recoil kick applied after a shot (`kick_*` is the nominal pattern kick).
@@ -390,20 +398,9 @@ impl RearguardRecorder {
         yaw: f64,
         pitch: f64,
     ) -> bool {
-        let r = (|| {
-            Some(Record::Recoil(telemetry::Recoil {
-                ts_us: to_u64(ts_us)?,
-                frame: to_u64(frame)?,
-                tick: to_u64(tick)?,
-                shot: to_u64(shot)?,
-                burst_shot: to_u32(burst_shot)?,
-                kick_yaw,
-                kick_pitch,
-                yaw,
-                pitch,
-            }))
-        })();
-        self.write(r)
+        self.write(records::recoil(
+            ts_us, frame, tick, shot, burst_shot, kick_yaw, kick_pitch, yaw, pitch,
+        ))
     }
 
     /// A new static target appeared.
@@ -417,17 +414,14 @@ impl RearguardRecorder {
         target_yaw: f64,
         target_pitch: f64,
     ) -> bool {
-        let r = (|| {
-            Some(Record::Target(telemetry::Target {
-                ts_us: to_u64(ts_us)?,
-                frame: to_u64(frame)?,
-                tick: to_u64(tick)?,
-                target: to_u64(target)?,
-                target_yaw,
-                target_pitch,
-            }))
-        })();
-        self.write(r)
+        self.write(records::target(
+            ts_us,
+            frame,
+            tick,
+            target,
+            target_yaw,
+            target_pitch,
+        ))
     }
 
     /// End of session.
@@ -441,17 +435,7 @@ impl RearguardRecorder {
         hits: i64,
         complete: bool,
     ) -> bool {
-        let r = (|| {
-            Some(Record::End(telemetry::End {
-                ts_us: to_u64(ts_us)?,
-                frame: to_u64(frame)?,
-                tick: to_u64(tick)?,
-                shots: to_u64(shots)?,
-                hits: to_u64(hits)?,
-                complete,
-            }))
-        })();
-        self.write(r)
+        self.write(records::end(ts_us, frame, tick, shots, hits, complete))
     }
 
     /// Pushes buffered records to disk.
@@ -470,5 +454,296 @@ impl RearguardRecorder {
         let result = self.flush();
         self.out = None;
         result
+    }
+}
+
+/// A live link to a Rearguard server (`rearguard_core::uplink`): opens a session,
+/// streams telemetry from a background thread, and fetches the verdict. Recording
+/// calls never block; see the uplink documentation for what happens when the server
+/// goes away.
+#[derive(GodotClass)]
+#[class(base = RefCounted, init)]
+pub struct RearguardClient {
+    uplink: Option<Uplink>,
+    info: Option<SessionInfo>,
+    /// The server-issued seed, until a probe takes it.
+    seed: Option<EpochSeed>,
+}
+
+impl RearguardClient {
+    fn send(&self, record: Option<Record>) -> bool {
+        match (record, self.uplink.as_ref()) {
+            (Some(r), Some(u)) => {
+                u.record(r);
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+#[godot_api]
+impl RearguardClient {
+    /// Connects to `address` (`host:port`, loopback), opens a session and starts
+    /// streaming. Blocks for at most a few seconds.
+    #[func]
+    fn connect_to(&mut self, address: GString, client_name: GString) -> Error {
+        let Ok(addr) = address.to_string().parse::<SocketAddr>() else {
+            return Error::ERR_INVALID_PARAMETER;
+        };
+        match Uplink::connect(UplinkConfig::local(addr, &client_name.to_string())) {
+            Ok((uplink, info, seed)) => {
+                self.uplink = Some(uplink);
+                self.info = Some(info);
+                self.seed = Some(seed);
+                Error::OK
+            }
+            Err(_) => Error::ERR_CANT_CONNECT,
+        }
+    }
+
+    /// `"not connected"`, `"connected"`, `"reconnecting"`, `"finishing"`, `"finished"`
+    /// or `"lost: <reason>"`.
+    #[func]
+    fn status(&self) -> GString {
+        match self.uplink.as_ref().map(Uplink::status) {
+            None => "not connected".into(),
+            Some(UplinkStatus::Connected) => "connected".into(),
+            Some(UplinkStatus::Reconnecting) => "reconnecting".into(),
+            Some(UplinkStatus::Finishing) => "finishing".into(),
+            Some(UplinkStatus::Finished) => "finished".into(),
+            Some(UplinkStatus::Lost(why)) => format!("lost: {why}").as_str().into(),
+        }
+    }
+
+    /// The session identifier (0 before connecting).
+    #[func]
+    fn session_id(&self) -> i64 {
+        self.info
+            .as_ref()
+            .map_or(0, |i| i64::try_from(i.session_id).unwrap_or(i64::MAX))
+    }
+
+    /// The match identifier, for the telemetry header.
+    #[func]
+    fn match_id(&self) -> GString {
+        self.info
+            .as_ref()
+            .map_or_else(GString::new, |i| i.match_id.as_str().into())
+    }
+
+    /// The player identifier, for the telemetry header.
+    #[func]
+    fn player_id(&self) -> i64 {
+        self.info
+            .as_ref()
+            .map_or(0, |i| i64::try_from(i.player_id).unwrap_or(i64::MAX))
+    }
+
+    /// The amplitude the server asked for, ppm.
+    #[func]
+    fn amplitude_ppm(&self) -> i64 {
+        self.info.as_ref().map_or(0, |i| i64::from(i.amplitude_ppm))
+    }
+
+    /// Sends the session header (the first record). Same fields as
+    /// [`RearguardRecorder::open`].
+    #[func]
+    fn record_header(&mut self, header: VarDictionary) -> bool {
+        self.send(header_from_dictionary(&header).map(Record::Header))
+    }
+
+    /// See [`RearguardRecorder`].
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn record_move(
+        &mut self,
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        dx: f64,
+        dy: f64,
+        yaw: f64,
+        pitch: f64,
+    ) -> bool {
+        self.send(records::movement(ts_us, frame, tick, dx, dy, yaw, pitch))
+    }
+
+    /// See [`RearguardRecorder`].
+    #[func]
+    fn record_button(&mut self, ts_us: i64, frame: i64, tick: i64, pressed: bool) -> bool {
+        self.send(records::button(ts_us, frame, tick, pressed))
+    }
+
+    /// See [`RearguardRecorder`].
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn record_fire(
+        &mut self,
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        shot: i64,
+        burst_shot: i64,
+        yaw: f64,
+        pitch: f64,
+        target: i64,
+        target_yaw: f64,
+        target_pitch: f64,
+        hit: bool,
+    ) -> bool {
+        self.send(records::fire(
+            ts_us,
+            frame,
+            tick,
+            shot,
+            burst_shot,
+            yaw,
+            pitch,
+            target,
+            target_yaw,
+            target_pitch,
+            hit,
+        ))
+    }
+
+    /// See [`RearguardRecorder`].
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn record_recoil(
+        &mut self,
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        shot: i64,
+        burst_shot: i64,
+        kick_yaw: f64,
+        kick_pitch: f64,
+        yaw: f64,
+        pitch: f64,
+    ) -> bool {
+        self.send(records::recoil(
+            ts_us, frame, tick, shot, burst_shot, kick_yaw, kick_pitch, yaw, pitch,
+        ))
+    }
+
+    /// See [`RearguardRecorder`].
+    #[func]
+    fn record_target(
+        &mut self,
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        target: i64,
+        target_yaw: f64,
+        target_pitch: f64,
+    ) -> bool {
+        self.send(records::target(
+            ts_us,
+            frame,
+            tick,
+            target,
+            target_yaw,
+            target_pitch,
+        ))
+    }
+
+    /// See [`RearguardRecorder`].
+    #[func]
+    fn record_end(
+        &mut self,
+        ts_us: i64,
+        frame: i64,
+        tick: i64,
+        shots: i64,
+        hits: i64,
+        complete: bool,
+    ) -> bool {
+        self.send(records::end(ts_us, frame, tick, shots, hits, complete))
+    }
+
+    /// Sends what is queued and ends the session; the final verdict arrives later.
+    #[func]
+    fn finish(&mut self) {
+        if let Some(u) = self.uplink.as_ref() {
+            u.finish();
+        }
+    }
+
+    /// Whether the final verdict has arrived (or the session was lost, so none will).
+    #[func]
+    fn is_done(&self) -> bool {
+        self.uplink
+            .as_ref()
+            .is_none_or(|u| matches!(u.status(), UplinkStatus::Finished | UplinkStatus::Lost(_)))
+    }
+
+    /// Stops the uplink's worker and closes the connection.
+    #[func]
+    fn close(&mut self) {
+        self.uplink = None;
+        self.seed = None;
+    }
+
+    /// Asks for a live verdict (debug builds only, for the developer overlay).
+    #[cfg(debug_assertions)]
+    #[func]
+    fn request_verdict(&mut self) {
+        if let Some(u) = self.uplink.as_ref() {
+            u.request_verdict();
+        }
+    }
+
+    /// The latest verdict as a dictionary, empty if none (debug builds only).
+    #[cfg(debug_assertions)]
+    #[func]
+    fn verdict(&self) -> VarDictionary {
+        let mut d = VarDictionary::new();
+        let Some(v) = self.uplink.as_ref().and_then(Uplink::verdict) else {
+            return d;
+        };
+        let evidence = |e: &rearguard_core::protocol::EvidenceSummary| {
+            let mut x = VarDictionary::new();
+            x.set("pairs", i64::try_from(e.pairs).unwrap_or(i64::MAX));
+            x.set("r", e.r);
+            x.set("slope", e.slope);
+            x.set("kappa", e.kappa);
+            x.set("z", e.z);
+            x.set("score", e.score);
+            x.set("confidence", e.confidence);
+            x.set("flagged", e.flagged);
+            x
+        };
+        let count = |n: u64| i64::try_from(n).unwrap_or(i64::MAX);
+        d.set("status", v.status.name());
+        d.set("score", v.score);
+        d.set("confidence", v.confidence);
+        d.set("flagged", v.flagged);
+        d.set("records", count(v.records));
+        d.set("shots", count(v.shots));
+        d.set("engagements", count(v.engagements));
+        d.set("angle_mismatches", count(v.angle_mismatches));
+        d.set("windows", count(v.windows));
+        d.set("flagged_windows", count(v.flagged_windows));
+        d.set("error", &evidence(&v.error));
+        d.set("steps", &evidence(&v.steps));
+        d
+    }
+
+    /// Uplink counters as a dictionary (debug builds only).
+    #[cfg(debug_assertions)]
+    #[func]
+    fn stats(&self) -> VarDictionary {
+        let mut d = VarDictionary::new();
+        let s = self.uplink.as_ref().map(Uplink::stats).unwrap_or_default();
+        let count = |n: u64| i64::try_from(n).unwrap_or(i64::MAX);
+        d.set("bytes_sent", count(s.bytes_sent));
+        d.set("bytes_received", count(s.bytes_received));
+        d.set("records_queued", count(s.records_queued));
+        d.set("chunks_sent", count(s.chunks_sent));
+        d.set("chunks_acked", count(s.chunks_acked));
+        d.set("resumes", count(s.resumes));
+        d.set("records_dropped", count(s.records_dropped));
+        d
     }
 }

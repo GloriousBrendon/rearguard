@@ -22,10 +22,9 @@ func _initialize() -> void:
 
 func _summarize(path: String) -> void:
 	var records := Recorder.read_file(path)
-	if records.is_empty() or records[0].get("type") != "header":
-		printerr("%s: not a recording" % path)
+	if records.is_empty() or records[0].get("type") != "header" or records[0].get("format") != Recorder.FORMAT:
+		printerr("%s: not a rearguard.telemetry recording" % path)
 		return
-	var h := records[0]
 	var moves := records.filter(func(r: Dictionary) -> bool: return r.type == "move")
 	var per_frame := {}
 	var sum := Vector2.ZERO
@@ -48,8 +47,13 @@ func _summarize(path: String) -> void:
 	gaps.sort()
 	var same_ts := gaps.filter(func(g: int) -> bool: return g < 50).size()
 	print("%s" % path)
+	# The runtime details live next to the recording (<recording>.env.json).
+	var env: Variant = JSON.parse_string(FileAccess.get_file_as_string(path + ".env.json"))
+	if not env is Dictionary:
+		env = {}
 	print("  source %s, driver %s, os %s, godot %s, accumulated_input %s" % [
-		h.source, h.display_driver, h.os, h.godot_version, h.accumulated_input])
+		env.get("source", "?"), env.get("display_driver", "?"), env.get("os", "?"),
+		env.get("godot_version", "?"), env.get("accumulated_input", "?")])
 	print("  move events %d over %d frames; per frame median %s, max %s" % [
 		moves.size(), per_frame.size(),
 		frame_counts[frame_counts.size() / 2] if not frame_counts.is_empty() else 0,

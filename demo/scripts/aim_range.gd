@@ -1,17 +1,21 @@
 ## Aim range scene: builds the world, captures raw mouse input, drives a
 ## RangeSession and draws it. The input path is documented in demo/README.md.
 ##
+## The session's telemetry (rearguard.telemetry v1) is written to a file by the Rust
+## extension and, with --server, streamed live to a Rearguard server, whose session
+## seed then drives the input-probe drift. See demo/README.md, "Live loop".
+##
 ## Command-line options come after `--`, for example:
-##   godot --path demo -- --scenario spray --seed 7
+##   godot --path demo -- --scenario spray --seed 7 --server 127.0.0.1:7461
 ##   godot --headless --path demo --fixed-fps 120 -- --bot --scenario flick --seed 7 --duration 10
 extends Node3D
 
 const RangeSession := preload("res://scripts/range_session.gd")
 const Scenario := preload("res://scripts/scenario.gd")
-const Recorder := preload("res://scripts/recorder.gd")
 const AimModel := preload("res://scripts/aim_model.gd")
 const ScriptedBot := preload("res://scripts/scripted_bot.gd")
 const ProbeHooks := preload("res://scripts/probe_hooks.gd")
+const TelemetryOut := preload("res://scripts/telemetry_out.gd")
 
 ## Marks events the scripted bot injects, so bot and hardware input never mix.
 const BOT_DEVICE_ID := 0x7E57
@@ -26,6 +30,14 @@ var bot: ScriptedBot
 var recording_path := ""
 ## The Rust extension's RearguardProbe while the input probe runs, else null.
 var probe: RefCounted = null
+## The Rust extension's RearguardClient while connected to a server, else null.
+var client: RefCounted = null
+## The telemetry file writer (RearguardRecorder), else null.
+var telemetry_file: RefCounted = null
+## What the run used: probe source and amplitude, server status. Never the seed.
+var run_info := {}
+## The final line printed about the server's verdict, once known.
+var verdict_line := ""
 
 var _camera: Camera3D
 var _target: MeshInstance3D
@@ -34,6 +46,9 @@ var _frame_seen := -1
 var _events_this_frame := 0
 var _max_events_per_frame := 0
 var _motion_events := 0
+var _waiting_since_ms := -1
+var _frame_times := PackedInt64Array()
+var _last_frame_us := 0
 
 
 static func default_config() -> Dictionary:
@@ -49,13 +64,17 @@ static func default_config() -> Dictionary:
 		"probe": true,
 		"probe_seed_file": "",
 		"probe_amplitude_ppm": 5000,
-		"telemetry": "",
+		"server": "",
+		"record": true,
+		"frame_stats": "",
+		"verdict_timeout_s": 10.0,
 	}
 
 
 ## Parses `--scenario NAME --seed N --duration S --sens DEG --bot --bot-seed N
 ## --out PATH --quit --no-probe --probe-seed-file PATH --probe-amplitude-ppm N
-## --telemetry PATH`. Unknown options are reported and ignored.
+## --server HOST:PORT --no-record --frame-stats PATH`. Unknown options are reported and
+## ignored.
 static func parse_args(args: PackedStringArray) -> Dictionary:
 	var c := default_config()
 	var i := 0
@@ -71,8 +90,10 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 			"--out": c.out = value; i += 1
 			"--probe-seed-file": c.probe_seed_file = value; i += 1
 			"--probe-amplitude-ppm": c.probe_amplitude_ppm = value.to_int(); i += 1
-			"--telemetry": c.telemetry = value; i += 1
+			"--server": c.server = value; i += 1
+			"--frame-stats": c.frame_stats = value; i += 1
 			"--no-probe": c.probe = false
+			"--no-record": c.record = false
 			"--bot": c.bot = true; c.quit = true
 			"--quit": c.quit = true
 			"--no-quit": c.quit = false
@@ -99,9 +120,15 @@ func _ready() -> void:
 	recording_path = ProjectSettings.globalize_path(recording_path)
 
 	var scenario := Scenario.new(kind, config.seed, config.duration)
-	session = RangeSession.new(scenario, Engine.physics_ticks_per_second, Recorder.new(recording_path))
+	session = RangeSession.new(scenario, Engine.physics_ticks_per_second)
 	session.aim.deg_per_count = config.sens
 	_build_world()
+	# The developer overlay exists only in debug builds (the editor, `godot` runs and
+	# debug exports); release exports never create it.
+	if OS.is_debug_build():
+		var overlay: Node = load("res://scripts/dev_overlay.gd").new()
+		add_child(overlay)
+		overlay.watch(self)
 	if config.bot:
 		bot = ScriptedBot.new(config.bot_seed)
 		_start()
@@ -110,7 +137,89 @@ func _ready() -> void:
 func _start() -> void:
 	var ts := Time.get_ticks_usec()
 	var frame := Engine.get_process_frames()
-	var environment := {
+	var fields := {"probe_start_us": ts}
+	run_info = {
+		"probe_enabled": false, "probe_amplitude_ppm": 0, "probe_start_us": ts,
+		"probe_seed": "none", "server": config.server, "server_status": "not used",
+	}
+	if not ProbeHooks.available():
+		push_warning("aim_range: Rearguard extension not loaded: no probe, no telemetry file, no server"
+				+ " (build it with: cargo build -p rearguard-godot)")
+	else:
+		if not str(config.server).is_empty():
+			_connect_server(fields, ts)
+		if config.probe and probe == null:
+			_start_local_probe(ts)
+		if config.record:
+			_open_recording()
+	_write_environment()
+	session.start(fields, ts, frame)
+
+
+## Opens a server session. Its seed drives the probe; its ids go in the header. If the
+## server cannot be reached, the run carries on offline (see README.md, "Live loop").
+func _connect_server(fields: Dictionary, ts: int) -> void:
+	var c: RefCounted = ClassDB.instantiate("RearguardClient")
+	var name := "rearguard-aimrange/godot-%s" % Engine.get_version_info().string
+	var err: int = c.connect_to(str(config.server), name)
+	if err != OK:
+		push_warning("aim_range: server %s unreachable (%s); running offline with a local seed,"
+				% [config.server, error_string(err)] + " so no verdict will come")
+		run_info.server_status = "unreachable"
+		return
+	client = c
+	run_info.server_status = "connected"
+	fields.match_id = str(c.match_id())
+	fields.player_id = int(c.player_id())
+	session.listeners.append(func(r: Dictionary) -> void: TelemetryOut.forward(c, r))
+	if config.probe:
+		var p: RefCounted = ClassDB.instantiate("RearguardProbe")
+		if p.start_session_from_client(c, ts) == OK:
+			probe = p
+			ProbeHooks.install(session.aim, probe)
+			run_info.probe_enabled = true
+			run_info.probe_amplitude_ppm = int(p.amplitude_ppm())
+			run_info.probe_seed = "server"
+	print("aim_range: server session %d (match %s)" % [c.session_id(), c.match_id()])
+
+
+## Starts the probe from a local seed: offline, or when the server was unreachable.
+func _start_local_probe(ts: int) -> void:
+	var p: RefCounted = ClassDB.instantiate("RearguardProbe")
+	var err: int
+	if str(config.probe_seed_file).is_empty():
+		err = p.start_session_random(config.probe_amplitude_ppm, ts)
+		run_info.probe_seed = "random"
+	else:
+		var path := ProjectSettings.globalize_path(config.probe_seed_file)
+		DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+		err = p.start_session_from_file(path, true, config.probe_amplitude_ppm, ts)
+		run_info.probe_seed = "file"
+	if err != OK:
+		push_error("aim_range: input probe not started: %s" % error_string(err))
+		run_info.probe_seed = "none"
+		return
+	probe = p
+	ProbeHooks.install(session.aim, probe)
+	run_info.probe_enabled = true
+	run_info.probe_amplitude_ppm = config.probe_amplitude_ppm
+
+
+## Writes the session's telemetry (rearguard.telemetry v1) through the extension.
+func _open_recording() -> void:
+	DirAccess.make_dir_recursive_absolute(recording_path.get_base_dir())
+	var rec: RefCounted = ClassDB.instantiate("RearguardRecorder")
+	var path := recording_path
+	telemetry_file = rec
+	session.listeners.append(func(r: Dictionary) -> void: TelemetryOut.forward(rec, r, path))
+
+
+## The runtime details the telemetry header does not carry, next to the recording as
+## <recording>.env.json. Never contains the seed or where it is kept.
+func _write_environment() -> void:
+	if not config.record:
+		return
+	var env := {
 		"source": "bot" if bot != null else "human",
 		"bot_seed": config.bot_seed if bot != null else null,
 		"godot_version": Engine.get_version_info().string,
@@ -119,71 +228,13 @@ func _start() -> void:
 		"accumulated_input": Input.is_using_accumulated_input(),
 		"delta_source": "InputEventMouseMotion.screen_relative",
 		"clock": "Time.get_ticks_usec",
+		"debug_build": OS.is_debug_build(),
 	}
-	environment.merge(_start_probe(ts))
-	_open_telemetry(ts, frame)
-	session.start(environment, ts, frame)
-
-
-## Starts the input probe (Rust extension) with probe tick 0 at `ts`, and installs it
-## on the two aim hooks. Returns the header fields describing it; the seed itself and
-## where it is kept are never recorded.
-func _start_probe(ts: int) -> Dictionary:
-	var info := {"probe_enabled": false, "probe_amplitude_ppm": 0, "probe_start_us": ts, "probe_seed": "none"}
-	if not config.probe:
-		return info
-	if not ProbeHooks.available():
-		push_warning("aim_range: Rearguard extension not loaded, running without the input probe"
-				+ " (build it with: cargo build -p rearguard-godot)")
-		return info
-	probe = ClassDB.instantiate("RearguardProbe")
-	var err: int
-	if str(config.probe_seed_file).is_empty():
-		err = probe.start_session_random(config.probe_amplitude_ppm, ts)
-		info.probe_seed = "random"
-	else:
-		var path := ProjectSettings.globalize_path(config.probe_seed_file)
-		DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-		err = probe.start_session_from_file(path, true, config.probe_amplitude_ppm, ts)
-		info.probe_seed = "file"
-	if err != OK:
-		push_error("aim_range: input probe not started: %s" % error_string(err))
-		probe = null
-		info.probe_seed = "none"
-		return info
-	ProbeHooks.install(session.aim, probe)
-	info.probe_enabled = true
-	info.probe_amplitude_ppm = config.probe_amplitude_ppm
-	return info
-
-
-## Opens the rearguard.telemetry output (Rust extension), if one was asked for.
-func _open_telemetry(ts: int, frame: int) -> void:
-	if str(config.telemetry).is_empty():
-		return
-	if not ProbeHooks.available():
-		push_warning("aim_range: Rearguard extension not loaded, no telemetry written")
-		return
-	var path := ProjectSettings.globalize_path(config.telemetry)
-	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	var recorder: RefCounted = ClassDB.instantiate("RearguardRecorder")
-	var err: int = recorder.open(path, {
-		"ts_us": ts, "frame": frame, "tick": 0,
-		"match_id": "aimrange-local", "player_id": 0, "source": "client",
-		"probe_start_us": ts,
-		"deg_per_count": float(config.sens),
-		"physics_hz": Engine.physics_ticks_per_second,
-		"scenario": config.scenario,
-		"scenario_seed": config.seed,
-		"duration_s": float(config.duration),
-		"recoil_pattern": Scenario.RECOIL_PATTERN_ID,
-		"target_distance_m": Scenario.TARGET_DISTANCE_M,
-		"target_radius_m": Scenario.TARGET_RADIUS_M,
-	})
-	if err != OK:
-		push_error("aim_range: telemetry not written: %s" % error_string(err))
-		return
-	session.telemetry = recorder
+	env.merge(run_info)
+	DirAccess.make_dir_recursive_absolute(recording_path.get_base_dir())
+	var f := FileAccess.open(recording_path + ".env.json", FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(env, "  ") + "\n")
 
 
 func _active() -> bool:
@@ -224,10 +275,22 @@ func _notification(what: int) -> void:
 
 
 func _close_recording() -> void:
-	if session == null or session.recorder == null:
+	if session == null or not session.started:
 		return
+	# Writes an incomplete end record (and closes the file) if the run was cut short.
 	session.abort(Time.get_ticks_usec(), Engine.get_process_frames())
-	session.recorder.close()
+	_release_extension()
+
+
+## Drops every extension object: the uplink's worker stops, the probe's seed is wiped.
+func _release_extension() -> void:
+	if client != null:
+		client.close()
+		client = null
+	if probe != null:
+		probe.stop()
+		probe = null
+	telemetry_file = null
 
 
 func _release_mouse() -> void:
@@ -254,18 +317,75 @@ func _physics_process(_delta: float) -> void:
 			mb.pressed = p.trigger
 			Input.parse_input_event(mb)
 	session.step_tick(Time.get_ticks_usec(), Engine.get_process_frames())
-	if session.finished:
+	if telemetry_file != null and session.tick % Engine.physics_ticks_per_second == 0:
+		telemetry_file.flush()
+	if session.finished and _waiting_since_ms < 0 and verdict_line.is_empty():
 		_finish()
 
 
 func _finish() -> void:
-	_close_recording()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	print("aim_range: %s seed %d finished, %d/%d hits, recording %s" % [
-		config.scenario, config.seed, session.hits, session.shots, recording_path])
+		config.scenario, config.seed, session.hits, session.shots,
+		recording_path if telemetry_file != null else "(none)"])
+	if client != null:
+		# Everything recorded so far is queued; end the server session and wait (up to
+		# verdict_timeout_s) for its verdict before completing.
+		client.finish()
+		_waiting_since_ms = Time.get_ticks_msec()
+	else:
+		_complete()
+
+
+func _complete() -> void:
+	_waiting_since_ms = -1
+	if client != null:
+		verdict_line = "aim_range: server session %d: %s" % [client.session_id(), client.status()]
+		# Only a final verdict counts here; the overlay's live ones (status "open") do not.
+		var v: Dictionary = client.verdict() if client.has_method("verdict") else {}
+		if not v.is_empty() and v.status != "open":
+			verdict_line += ", verdict score %.2f, flagged %s, %d records, %d windows" % [
+				v.score, v.flagged, v.records, v.windows]
+		elif str(client.status()) != "finished":
+			verdict_line += ", no final verdict"
+	else:
+		verdict_line = "aim_range: no server session (%s)" % run_info.get("server_status", "not used")
+	print(verdict_line)
+	_write_frame_stats()
+	_release_extension()
 	run_finished.emit(recording_path)
 	if config.quit:
 		get_tree().quit(0)
+
+
+## Per-frame wall time over the active run (--frame-stats), for measuring the cost of
+## the probe, the recorder and the uplink.
+func _write_frame_stats() -> void:
+	if str(config.frame_stats).is_empty() or _frame_times.is_empty():
+		return
+	var sorted := _frame_times.duplicate()
+	sorted.sort()
+	var pick := func(q: float) -> int: return sorted[mini(int(q * (sorted.size() - 1) + 0.5), sorted.size() - 1)]
+	var total := 0
+	for t in sorted:
+		total += t
+	var stats := {
+		"frames": sorted.size(), "p50_us": pick.call(0.5), "p99_us": pick.call(0.99),
+		"mean_us": float(total) / sorted.size(), "max_us": sorted[-1],
+		"probe": run_info.get("probe_enabled", false), "record": config.record,
+		"server": run_info.get("server_status", "not used"), "scenario": config.scenario,
+	}
+	if client != null and client.has_method("stats"):
+		var u: Dictionary = client.stats()
+		stats.bytes_sent = u.bytes_sent
+		stats.records_queued = u.records_queued
+		stats.chunks_sent = u.chunks_sent
+	var path := ProjectSettings.globalize_path(config.frame_stats)
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(stats) + "\n")
+	print("aim_range: frame time p50 %d us, p99 %d us over %d frames" % [stats.p50_us, stats.p99_us, stats.frames])
 
 
 func _count_event() -> void:
@@ -281,6 +401,14 @@ func _count_event() -> void:
 func _process(_delta: float) -> void:
 	if session == null:
 		return
+	var now := Time.get_ticks_usec()
+	if _active():
+		if _last_frame_us > 0:
+			_frame_times.append(now - _last_frame_us)
+		_last_frame_us = now
+	if _waiting_since_ms >= 0 and (client == null or client.is_done()
+			or Time.get_ticks_msec() - _waiting_since_ms > int(config.verdict_timeout_s * 1000.0)):
+		_complete()
 	var view := session.aim.view()
 	_camera.rotation = Vector3(deg_to_rad(view[1]), deg_to_rad(view[0]), 0.0)
 	var t := session.current_target()
@@ -294,7 +422,7 @@ func _process(_delta: float) -> void:
 
 func _status_line() -> String:
 	if session.finished:
-		return "Finished. Recording: %s" % recording_path
+		return "Finished. %s" % verdict_line if not verdict_line.is_empty() else "Finished; waiting for the verdict"
 	if bot != null:
 		return "Scripted bot"
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:

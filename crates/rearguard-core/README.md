@@ -15,6 +15,9 @@ engine crate, directly or transitively. `unsafe` code is forbidden.
   of signal shape.
 - `secret`: `SecretKey`, which is redacted in `Debug`/`Display` and zeroized on drop.
 - `telemetry`: the versioned client telemetry schema (decision D2), as JSON Lines.
+- `uplink`: the client side of the protocol, for game clients. It streams one
+  session's telemetry from a background thread, never blocks the caller, and resumes
+  after dropped connections. It has a defined "lost" state (see its docs).
 - `protocol`: the client–server wire protocol. Frames are a length prefix, a version
   byte and a postcard message. It covers session seeds, telemetry chunks with replay
   numbers, resume and verdicts; `rearguard-server` speaks it.

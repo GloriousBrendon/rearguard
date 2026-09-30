@@ -19,10 +19,15 @@ impl std::fmt::Debug for Logger {
 }
 
 impl Logger {
-    /// Writes lines to standard error.
+    /// Writes lines to standard error. A failed write (for example, the reading end of
+    /// a pipe has closed) is ignored: logging must never take the server down, whereas
+    /// `eprintln!` would panic.
     #[must_use]
     pub fn stderr() -> Self {
-        Self(Arc::new(|line| eprintln!("{line}")))
+        Self(Arc::new(|line| {
+            use std::io::Write as _;
+            let _ = writeln!(std::io::stderr().lock(), "{line}");
+        }))
     }
 
     /// Keeps lines in memory, for tests.

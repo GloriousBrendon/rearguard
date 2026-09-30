@@ -42,6 +42,22 @@ Timestamps map to probe ticks by the telemetry rule
 `rearguard_core::telemetry::probe_tick`: `(ts_us - probe_start_us) / 1000`. Amplitudes
 above 2% and negative timestamps are refused.
 
+**`RearguardClient`** (RefCounted): a live link to a Rearguard server. It wraps
+`rearguard_core::uplink`.
+
+| Method | Meaning |
+|--------|---------|
+| `connect_to(address, client_name) -> Error` | Opens a server session. Blocks for at most a few seconds |
+| `record_header(dict)`, `record_move(...)` and the other `record_*` | Same calls as the recorder. Each one only queues the record; a worker thread sends it |
+| `finish()`, `is_done()`, `close()` | End the session, wait for the final verdict, stop the worker |
+| `status()` | `"connected"`, `"reconnecting"`, `"finishing"`, `"finished"`, `"lost: <reason>"` or `"not connected"` |
+| `session_id()`, `match_id()`, `player_id()`, `amplitude_ppm()` | What the server assigned (never the seed) |
+| `verdict()`, `stats()`, `request_verdict()` | **Debug builds only** (`#[cfg(debug_assertions)]`), for the developer overlay: the latest verdict, and uplink counters |
+
+`RearguardProbe.start_session_from_client(client, probe_start_us)` moves the
+server-issued seed from the client into the probe, inside Rust. The seed can be taken
+once, and GDScript never sees it.
+
 **`RearguardRecorder`** (RefCounted): writes client telemetry in the
 `rearguard.telemetry` v1 schema, with exact floats.
 - `open(path, header: Dictionary) -> Error` takes the `Header` fields except `format`

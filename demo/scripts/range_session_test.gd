@@ -10,8 +10,8 @@ const HZ := 120
 
 
 ## Runs a scenario with the scripted bot, driving the session directly (no scene),
-## with synthetic but strictly increasing timestamps. Returns the records as written
-## (exact values); `_run_bot_lines` returns the JSON text.
+## with synthetic but strictly increasing timestamps. Returns the records as emitted
+## (exact values, in the rearguard.telemetry schema).
 func _run_bot(kind: Scenario.Kind, seed_value: int, duration_s: float,
 		look_hook: Callable = Callable(), recoil_hook: Callable = Callable()) -> Array[Dictionary]:
 	var rec := Recorder.new()
@@ -21,7 +21,7 @@ func _run_bot(kind: Scenario.Kind, seed_value: int, duration_s: float,
 	if recoil_hook.is_valid():
 		s.aim.recoil_hook = recoil_hook
 	var ts := 1000
-	s.start({"source": "bot"}, ts, 0)
+	s.start({}, ts, 0)
 	var bot := ScriptedBot.new(7)
 	while not s.finished:
 		var p := bot.plan(s)
@@ -33,11 +33,8 @@ func _run_bot(kind: Scenario.Kind, seed_value: int, duration_s: float,
 			s.handle_trigger(p.trigger, ts, s.tick)
 		ts += 250
 		s.step_tick(ts, s.tick)
-	_last_lines = rec.lines
 	return rec.records
 
-
-var _last_lines := PackedStringArray()
 
 
 func _types(records: Array[Dictionary]) -> Dictionary:
@@ -92,13 +89,18 @@ func test_recording_contents() -> void:
 	for kind: Scenario.Kind in Scenario.Kind.values():
 		var name := Scenario.kind_name(kind)
 		var exact := _run_bot(kind, 3, 5.0)
-		var records := Recorder.parse_lines(_last_lines)
-		check_eq(records.size(), exact.size(), name + " one line per record")
+		var records := exact
 		var header := records[0]
 		check_eq(header.type, "header", name)
 		check_eq(header.format, Recorder.FORMAT, name)
 		check_eq(int(header.version), Recorder.VERSION, name)
 		check_eq(header.scenario, name, name)
+		check_eq(header.source, "client", name)
+		check_eq(header.match_id, "aimrange-local", name + " offline match id")
+		check_eq(int(header.probe_start_us), int(header.ts_us), name + " probe starts with the session")
+		for key in ["player_id", "deg_per_count", "physics_hz", "duration_s", "recoil_pattern",
+				"target_distance_m", "target_radius_m"]:
+			check(header.has(key), "%s header has %s" % [name, key])
 		check_eq(int(header.scenario_seed), 3, name)
 		check_eq(records[-1].type, "end", name)
 		check_eq(records[-1].complete, true, name + " complete")

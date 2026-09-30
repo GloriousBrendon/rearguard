@@ -1,58 +1,24 @@
-## Writes a recording as JSON Lines: one JSON object per line, keys in insertion
-## order, floats at full (round-trip) precision. The format is documented in
-## demo/README.md under "Recording format".
+## In-memory log of a session's telemetry records, and a reader for telemetry files.
 ##
-## Writes to a file, or to memory when no path is given (used by the tests).
+## Records are dictionaries in the rearguard.telemetry v1 schema (rearguard_core::telemetry),
+## the same schema the server ingests. Telemetry *files* are written by the Rust extension
+## (RearguardRecorder, via telemetry_out.gd), which writes floats exactly; this log keeps
+## the exact in-memory records for tests.
 extends RefCounted
 
-const FORMAT := "rearguard.aimrange.recording"
-## Version 2 (task 1.5) adds the probe_* header fields; see demo/README.md.
-const VERSION := 2
+const FORMAT := "rearguard.telemetry"
+const VERSION := 1
 
-## When recording to memory: the lines written so far, and the records themselves.
-## Keep `records` for exact comparisons: Godot's own JSON/float parser is not
-## correctly rounded (see README.md), so parsing `lines` can be off in the last bit.
-var lines := PackedStringArray()
 var records: Array[Dictionary] = []
-var path := ""
-var _file: FileAccess
-
-
-## Opens `p_path` for writing, creating its directory. Empty path: record to memory.
-func _init(p_path: String = "") -> void:
-	path = p_path
-	if path.is_empty():
-		return
-	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-	_file = FileAccess.open(path, FileAccess.WRITE)
-	if _file == null:
-		push_error("recorder: cannot open %s: %s" % [path, error_string(FileAccess.get_open_error())])
 
 
 func write(record: Dictionary) -> void:
-	var line := JSON.stringify(record, "", false, true)
-	if _file != null:
-		_file.store_line(line)
-	elif path.is_empty():
-		lines.append(line)
-		records.append(record.duplicate())
+	records.append(record.duplicate())
 
 
-## Pushes buffered lines to disk, so a killed process loses at most the last second.
-func flush() -> void:
-	if _file != null:
-		_file.flush()
-
-
-func close() -> void:
-	if _file != null:
-		_file.close()
-		_file = null
-
-
-## Parses recording lines back into dictionaries. Numbers come back as floats, as
+## Parses telemetry lines back into dictionaries. Numbers come back as floats, as
 ## JSON has one number type. Godot's parser can be off by one ulp on some doubles;
-## the file itself is exact (checked against a correctly rounded parser).
+## the file itself is exact (see README.md).
 static func parse_lines(text_lines: PackedStringArray) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for line in text_lines:

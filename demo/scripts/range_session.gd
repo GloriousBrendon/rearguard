@@ -17,9 +17,9 @@ var aim := AimModel.new()
 var scenario: Scenario
 var recorder: Recorder
 var physics_hz: int
-## Optional second output: a RearguardRecorder (Rust extension) writing the same events
-## in the rearguard.telemetry schema. Opened by the caller; closed at the end.
-var telemetry: RefCounted = null
+## Called with every record (dictionaries in the rearguard.telemetry v1 schema), in
+## order: the telemetry file and the server uplink (see telemetry_out.gd).
+var listeners: Array[Callable] = []
 
 var tick := 0
 var started := false
@@ -40,29 +40,33 @@ func _init(p_scenario: Scenario, p_physics_hz: int, p_recorder: Recorder = null)
 	recorder = p_recorder
 
 
-## Starts the run and writes the header. `environment` adds fields describing the
-## runtime (Godot version, display driver, input source); see README.md.
-func start(environment: Dictionary, ts_us: int, frame: int) -> void:
+## Starts the run and writes the rearguard.telemetry header. `session_fields` may set
+## `match_id` and `player_id` (as the server assigned them; default a local match) and
+## `probe_start_us` (default: this start time).
+func start(session_fields: Dictionary, ts_us: int, frame: int) -> void:
 	if started:
 		return
 	started = true
 	var header := {
 		"type": "header",
+		"ts_us": ts_us,
+		"frame": frame,
+		"tick": tick,
 		"format": Recorder.FORMAT,
 		"version": Recorder.VERSION,
+		"match_id": session_fields.get("match_id", "aimrange-local"),
+		"player_id": session_fields.get("player_id", 0),
+		"source": "client",
+		"probe_start_us": session_fields.get("probe_start_us", ts_us),
+		"deg_per_count": aim.deg_per_count,
+		"physics_hz": physics_hz,
 		"scenario": Scenario.kind_name(scenario.kind),
 		"scenario_seed": scenario.seed_value,
 		"duration_s": scenario.duration_s,
-		"physics_hz": physics_hz,
-		"deg_per_count": aim.deg_per_count,
 		"recoil_pattern": Scenario.RECOIL_PATTERN_ID,
 		"target_distance_m": Scenario.TARGET_DISTANCE_M,
 		"target_radius_m": Scenario.TARGET_RADIUS_M,
 	}
-	header.merge(environment)
-	header["ts_us"] = ts_us
-	header["frame"] = frame
-	header["tick"] = tick
 	_record(header)
 	_record_target(ts_us, frame)
 
@@ -95,7 +99,7 @@ func handle_trigger(pressed: bool, ts_us: int, frame: int) -> void:
 	_trigger_down = pressed
 	_record({
 		"type": "button", "ts_us": ts_us, "frame": frame, "tick": tick,
-		"button": "fire", "pressed": pressed,
+		"pressed": pressed,
 	})
 	if pressed:
 		_try_fire(ts_us, frame)
@@ -118,8 +122,6 @@ func step_tick(ts_us: int, frame: int) -> void:
 		_advance_target(ts_us, frame)
 	if time_s() >= scenario.duration_s:
 		_end(ts_us, frame, true)
-	elif recorder != null and tick % physics_hz == 0:
-		recorder.flush()
 
 
 ## Ends the run early (window closed, scene freed). The end record says so.
@@ -211,30 +213,5 @@ func _record_target(ts_us: int, frame: int) -> void:
 func _record(record: Dictionary) -> void:
 	if recorder != null:
 		recorder.write(record)
-	if telemetry != null:
-		_forward(record)
-
-
-## Mirrors one record into the rearguard.telemetry recorder (same fields, typed calls).
-func _forward(r: Dictionary) -> void:
-	var t := int(r.ts_us)
-	var f := int(r.frame)
-	var k := int(r.tick)
-	match r.type:
-		"move":
-			telemetry.record_move(t, f, k, float(r.dx), float(r.dy), r.yaw, r.pitch)
-		"button":
-			telemetry.record_button(t, f, k, r.pressed)
-		"fire":
-			telemetry.record_fire(t, f, k, r.shot, r.burst_shot, r.yaw, r.pitch,
-					r.target, r.target_yaw, r.target_pitch, r.hit)
-		"recoil":
-			telemetry.record_recoil(t, f, k, r.shot, r.burst_shot, r.kick_yaw, r.kick_pitch,
-					r.yaw, r.pitch)
-		"target":
-			telemetry.record_target(t, f, k, r.target, r.target_yaw, r.target_pitch)
-		"end":
-			telemetry.record_end(t, f, k, r.shots, r.hits, r.complete)
-			telemetry.close()
-		_:
-			pass # The header is written when the telemetry recorder is opened.
+	for listener in listeners:
+		listener.call(record)

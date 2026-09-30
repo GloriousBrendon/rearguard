@@ -18,9 +18,21 @@ const DEFAULT_DEG_PER_COUNT := 0.022
 var deg_per_count: float = DEFAULT_DEG_PER_COUNT
 var yaw_deg: float = 0.0
 var pitch_deg: float = 0.0
+## Holds the timestamp of the event being applied. Hooks that depend on time capture
+## this small object, never the AimModel itself: a hook stored on the model that
+## captured the model would form a reference cycle, and the model would leak at exit.
+class EventClock extends RefCounted:
+	var us: int = 0
+
+
+var clock := EventClock.new()
 ## Timestamp (microseconds, the recording's clock) of the event being applied, for
 ## hooks that depend on time. RangeSession sets it before each apply_* call.
-var event_us: int = 0
+var event_us: int:
+	get:
+		return clock.us
+	set(value):
+		clock.us = value
 
 ## Look-path hook: takes the view change [d_yaw, d_pitch] in degrees derived from
 ## one raw delta and returns the change to apply.
