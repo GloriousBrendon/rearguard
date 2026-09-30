@@ -55,7 +55,7 @@ The repository is private, on a personal GitHub account. Licence not chosen yet.
 
 | Path                      | Purpose                                                         | Godot? |
 |---------------------------|-----------------------------------------------------------------|--------|
-| `crates/rearguard-core`   | Probes, protocol types, detection logic. Engine-agnostic.       | Never  |
+| `crates/rearguard-core`   | Probes, telemetry schema, detector (`detect`). Engine-agnostic. | Never  |
 | `crates/rearguard-sim`    | Closed test environment: synthetic players, test cheats, DR/FPR; `rearguard-sim` CLI. | Never  |
 | `crates/rearguard-server` | Holds seeds, ingests untrusted telemetry, judges reactions.     | Never  |
 | `crates/rearguard-godot`  | Thin gdext binding over core (placeholder, no gdext yet).       | Only here |
@@ -109,7 +109,7 @@ checksum comes from the release's `SHA512-SUMS.txt`. The full steps are in
 | `serde` 1 (feature `derive`) | core, sim | MIT OR Apache-2.0 | Telemetry schema and sim manifest serialisation |
 | `serde_json` 1.0.151 (feature `float_roundtrip`) | core, sim | MIT OR Apache-2.0 | JSON Lines telemetry; `float_roundtrip` makes float parsing exact |
 | `chacha20` 0.10 (feature `rng`) | sim | MIT OR Apache-2.0 | Deterministic random streams for the simulator (already used by core) |
-| `libm` 0.2 | sim | MIT | Pure-Rust maths functions, so simulations are bit-identical across platforms |
+| `libm` 0.2 | core, sim | MIT | Pure-Rust maths functions, so simulations and detector scores are bit-identical across platforms |
 | `zeroize` 1.9 | sim | Apache-2.0 OR MIT | Wipes the simulation seed on drop (already used by core) |
 
 Every row must match a crate in `Cargo.lock` that passed `cargo deny`. The table lists

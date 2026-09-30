@@ -14,6 +14,15 @@ engine crate, directly or transitively. `unsafe` code is forbidden.
   bit-identical on every platform. See `docs/probe-signal-shapes.md` for the choice
   of signal shape.
 - `secret`: `SecretKey`, which is redacted in `Debug`/`Display` and zeroized on drop.
+- `telemetry`: the versioned client telemetry schema (decision D2), as JSON Lines.
+- `detect`: the server-side input-probe detector. It streams one player's telemetry,
+  replays it with and without the drift, and scores two statistics as signed
+  log-likelihood ratios with confidences, per window and per session:
+  - fire-time error against drift effect, tested against a strength bound (κ);
+  - the per-frame step response to the drift.
+
+  Thresholds come only from `DetectorConfig`, which has no defaults and is never sent
+  to a client. Results: `docs/detector-1.3.md`.
 
 Benchmarks: `cargo bench -p rearguard-core --bench probe`. Shape comparison:
 `cargo run --release -p rearguard-core --example compare_shapes`.

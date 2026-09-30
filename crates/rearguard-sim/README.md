@@ -193,6 +193,38 @@ Limits of the two models:
   smoothing aimbot.
 - Both play only the flick scenario, and neither is fitted to any real cheat.
 
+## Evaluating the detector (task 1.3)
+
+`rearguard-eval` streams simulated sessions through `rearguard_core::detect`, exactly as a
+server would (telemetry plus the player's epoch seed), and writes:
+- ROC data and plots;
+- detection rates at a fixed false-positive rate, with bootstrap intervals;
+- times to detection;
+- the slope-versus-significance comparison;
+- the step-response results against the smoothing aimbot;
+- calibrated thresholds and a summary.
+
+```sh
+cargo run --release -p rearguard-sim --bin rearguard-eval -- \
+  --config crates/rearguard-sim/eval/detector-1.3.json --out docs/results/detector-1.3 --seed 20260930
+```
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--config FILE` | required | Detector configuration (JSON). Thresholds live only here, never in code |
+| `--out DIR` | required | Output directory (files are overwritten) |
+| `--seed N` | required | Top-level simulation seed (never written out) |
+| `--humans N` | 5000 | Human sessions per scenario and amplitude (the false-positive side) |
+| `--cheats N` | 500 | Sessions per cheat class and amplitude |
+| `--bootstrap N` | 1000 | Bootstrap rounds |
+| `--fpr F` | 0.001 | Target false-positive rate |
+| `--engagements-per-match E` | 50 | For converting engagements into matches (an assumption) |
+| `--threads N` | all cores | Worker threads; the output does not depend on it |
+
+Each session is 15 minutes, scored at 30 s, 2 min, 5 min and 15 min, at drift
+amplitudes of 0.25, 0.5, 1 and 2%. The committed results and the assumptions note are in
+`docs/results/detector-1.3/` and `docs/detector-1.3.md`.
+
 ## Tests
 
 `cargo test -p rearguard-sim` runs in a few seconds, and covers:

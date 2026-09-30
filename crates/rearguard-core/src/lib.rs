@@ -4,6 +4,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod detect;
 pub mod probe;
 pub mod secret;
 pub mod telemetry;

@@ -443,6 +443,7 @@ dependencies = [
  "chacha20",
  "criterion",
  "hkdf",
+ "libm",
  "proptest",
  "serde",
  "serde_json",

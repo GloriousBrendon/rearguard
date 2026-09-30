@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 pub mod aimbot;
+pub mod evaluate;
 pub mod generate;
 pub mod human;
 pub mod seed;

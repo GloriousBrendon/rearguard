@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ce27e76496eb6a26e6e199f9e560016ce78ed482fbda64a878788ea217dbba83 # shrinks to noise_deg = 0.4546728142694024, noise_seed = 441017155310800850
