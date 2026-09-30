@@ -39,6 +39,9 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
         run: cargo test --workspace --locked
+      # Proves the GDExtension library (.so / .dll) itself builds on both platforms.
+      - name: Build the Godot extension
+        run: cargo build --locked -p rearguard-godot
 
   # Dependency policy. Linux only: cargo-deny and cargo tree evaluate the lockfile
   # graph for every target platform, so the result is the same on any host OS.
@@ -57,9 +60,10 @@ jobs:
       - name: No Godot crates outside rearguard-godot
         run: scripts/check-no-godot.sh
 
-  # Headless GDScript tests for demo/. Linux only (Windows Godot runs are task 3.4).
-  # Independent of the Rust jobs. To bump Godot, change both values below together
-  # (see demo/README.md, "CI"); the cache key includes them, so a bump downloads afresh.
+  # Headless GDScript tests for demo/, with the Rust extension (crates/rearguard-godot)
+  # built and required. Linux only (Windows Godot runs are task 3.4). To bump Godot,
+  # change both values below together (see demo/README.md, "CI"); the cache key includes
+  # them, so a bump downloads afresh.
   godot:
     name: godot tests (linux)
     runs-on: ubuntu-latest
@@ -70,6 +74,18 @@ jobs:
       GODOT_ZIP_SHA512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
     steps:
       - uses: actions/checkout@v4
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - name: Cache cargo registry and target
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-godot-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: cargo-godot-${{ runner.os }}-
       - name: Cache Godot download
         id: godot-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -90,7 +106,20 @@ jobs:
           unzip -q -o ~/godot-dl/godot.zip -d ~/godot
           mv ~/godot/Godot_v${GODOT_VERSION}_linux.x86_64 ~/godot/godot
           ~/godot/godot --version
+      # Import before building the extension: with a GDExtension class registered, Godot
+      # 4.7.2's first headless import segfaults while shutting down (gdext 0.5.5; any
+      # class triggers it, and later runs are unaffected). See crates/rearguard-godot/README.md.
+      # The cargo cache may hold a library from an earlier run, so remove it first; the
+      # build step below puts it back.
       - name: Import project
-        run: timeout 300 ~/godot/godot --headless --path demo --import
+        run: |
+          rm -f target/debug/librearguard_godot.so
+          timeout 300 ~/godot/godot --headless --path demo --import
+      # demo/rearguard.gdextension loads target/debug/librearguard_godot.so.
+      - name: Build the Godot extension
+        run: cargo build --locked -p rearguard-godot
       - name: Run tests
+        # Extension tests fail (instead of skipping) if the library did not load.
+        env:
+          REARGUARD_REQUIRE_EXTENSION: "1"
         run: timeout 600 ~/godot/godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd

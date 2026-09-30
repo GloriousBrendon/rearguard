@@ -37,6 +37,14 @@ pub const FORMAT: &str = "rearguard.telemetry";
 /// Schema version, in [`Header::version`]. Bumped on any change to the records.
 pub const VERSION: u32 = 1;
 
+/// The probe tick of an event: `(ts_us - probe_start_us) / 1000`, rounded down; 0 for
+/// an event before the probe start. Client and server both use this rule, so the tick
+/// is never sent.
+#[must_use]
+pub fn probe_tick(ts_us: u64, probe_start_us: u64) -> u64 {
+    ts_us.saturating_sub(probe_start_us) / 1_000
+}
+
 /// One telemetry record. Serialised with a `type` field naming the variant.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -390,6 +398,15 @@ mod tests {
         let mut bytes = Vec::new();
         write_jsonl(&mut bytes, records).unwrap();
         read_jsonl(bytes.as_slice()).unwrap()
+    }
+
+    #[test]
+    fn probe_tick_rounds_down_from_the_start() {
+        assert_eq!(probe_tick(5_000_000, 5_000_000), 0);
+        assert_eq!(probe_tick(5_000_999, 5_000_000), 0);
+        assert_eq!(probe_tick(5_001_000, 5_000_000), 1);
+        assert_eq!(probe_tick(4_000_000, 5_000_000), 0);
+        assert_eq!(probe_tick(u64::MAX, 0), u64::MAX / 1_000);
     }
 
     #[test]

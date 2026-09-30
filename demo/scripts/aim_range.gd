@@ -11,6 +11,7 @@ const Scenario := preload("res://scripts/scenario.gd")
 const Recorder := preload("res://scripts/recorder.gd")
 const AimModel := preload("res://scripts/aim_model.gd")
 const ScriptedBot := preload("res://scripts/scripted_bot.gd")
+const ProbeHooks := preload("res://scripts/probe_hooks.gd")
 
 ## Marks events the scripted bot injects, so bot and hardware input never mix.
 const BOT_DEVICE_ID := 0x7E57
@@ -23,6 +24,8 @@ var config: Dictionary = {}
 var session: RangeSession
 var bot: ScriptedBot
 var recording_path := ""
+## The Rust extension's RearguardProbe while the input probe runs, else null.
+var probe: RefCounted = null
 
 var _camera: Camera3D
 var _target: MeshInstance3D
@@ -43,11 +46,16 @@ static func default_config() -> Dictionary:
 		"bot_seed": 1,
 		"out": "",
 		"quit": false,
+		"probe": true,
+		"probe_seed_file": "",
+		"probe_amplitude_ppm": 5000,
+		"telemetry": "",
 	}
 
 
 ## Parses `--scenario NAME --seed N --duration S --sens DEG --bot --bot-seed N
-## --out PATH --quit`. Unknown options are reported and ignored.
+## --out PATH --quit --no-probe --probe-seed-file PATH --probe-amplitude-ppm N
+## --telemetry PATH`. Unknown options are reported and ignored.
 static func parse_args(args: PackedStringArray) -> Dictionary:
 	var c := default_config()
 	var i := 0
@@ -61,6 +69,10 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 			"--sens": c.sens = value.to_float(); i += 1
 			"--bot-seed": c.bot_seed = value.to_int(); i += 1
 			"--out": c.out = value; i += 1
+			"--probe-seed-file": c.probe_seed_file = value; i += 1
+			"--probe-amplitude-ppm": c.probe_amplitude_ppm = value.to_int(); i += 1
+			"--telemetry": c.telemetry = value; i += 1
+			"--no-probe": c.probe = false
 			"--bot": c.bot = true; c.quit = true
 			"--quit": c.quit = true
 			"--no-quit": c.quit = false
@@ -96,7 +108,9 @@ func _ready() -> void:
 
 
 func _start() -> void:
-	session.start({
+	var ts := Time.get_ticks_usec()
+	var frame := Engine.get_process_frames()
+	var environment := {
 		"source": "bot" if bot != null else "human",
 		"bot_seed": config.bot_seed if bot != null else null,
 		"godot_version": Engine.get_version_info().string,
@@ -105,7 +119,71 @@ func _start() -> void:
 		"accumulated_input": Input.is_using_accumulated_input(),
 		"delta_source": "InputEventMouseMotion.screen_relative",
 		"clock": "Time.get_ticks_usec",
-	}, Time.get_ticks_usec(), Engine.get_process_frames())
+	}
+	environment.merge(_start_probe(ts))
+	_open_telemetry(ts, frame)
+	session.start(environment, ts, frame)
+
+
+## Starts the input probe (Rust extension) with probe tick 0 at `ts`, and installs it
+## on the two aim hooks. Returns the header fields describing it; the seed itself and
+## where it is kept are never recorded.
+func _start_probe(ts: int) -> Dictionary:
+	var info := {"probe_enabled": false, "probe_amplitude_ppm": 0, "probe_start_us": ts, "probe_seed": "none"}
+	if not config.probe:
+		return info
+	if not ProbeHooks.available():
+		push_warning("aim_range: Rearguard extension not loaded, running without the input probe"
+				+ " (build it with: cargo build -p rearguard-godot)")
+		return info
+	probe = ClassDB.instantiate("RearguardProbe")
+	var err: int
+	if str(config.probe_seed_file).is_empty():
+		err = probe.start_session_random(config.probe_amplitude_ppm, ts)
+		info.probe_seed = "random"
+	else:
+		var path := ProjectSettings.globalize_path(config.probe_seed_file)
+		DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+		err = probe.start_session_from_file(path, true, config.probe_amplitude_ppm, ts)
+		info.probe_seed = "file"
+	if err != OK:
+		push_error("aim_range: input probe not started: %s" % error_string(err))
+		probe = null
+		info.probe_seed = "none"
+		return info
+	ProbeHooks.install(session.aim, probe)
+	info.probe_enabled = true
+	info.probe_amplitude_ppm = config.probe_amplitude_ppm
+	return info
+
+
+## Opens the rearguard.telemetry output (Rust extension), if one was asked for.
+func _open_telemetry(ts: int, frame: int) -> void:
+	if str(config.telemetry).is_empty():
+		return
+	if not ProbeHooks.available():
+		push_warning("aim_range: Rearguard extension not loaded, no telemetry written")
+		return
+	var path := ProjectSettings.globalize_path(config.telemetry)
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var recorder: RefCounted = ClassDB.instantiate("RearguardRecorder")
+	var err: int = recorder.open(path, {
+		"ts_us": ts, "frame": frame, "tick": 0,
+		"match_id": "aimrange-local", "player_id": 0, "source": "client",
+		"probe_start_us": ts,
+		"deg_per_count": float(config.sens),
+		"physics_hz": Engine.physics_ticks_per_second,
+		"scenario": config.scenario,
+		"scenario_seed": config.seed,
+		"duration_s": float(config.duration),
+		"recoil_pattern": Scenario.RECOIL_PATTERN_ID,
+		"target_distance_m": Scenario.TARGET_DISTANCE_M,
+		"target_radius_m": Scenario.TARGET_RADIUS_M,
+	})
+	if err != OK:
+		push_error("aim_range: telemetry not written: %s" % error_string(err))
+		return
+	session.telemetry = recorder
 
 
 func _active() -> bool:

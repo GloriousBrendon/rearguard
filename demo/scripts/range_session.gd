@@ -17,6 +17,9 @@ var aim := AimModel.new()
 var scenario: Scenario
 var recorder: Recorder
 var physics_hz: int
+## Optional second output: a RearguardRecorder (Rust extension) writing the same events
+## in the rearguard.telemetry schema. Opened by the caller; closed at the end.
+var telemetry: RefCounted = null
 
 var tick := 0
 var started := false
@@ -76,6 +79,7 @@ func current_target() -> PackedFloat64Array:
 func handle_motion(raw_counts: Vector2, ts_us: int, frame: int) -> void:
 	if not started or finished:
 		return
+	aim.event_us = ts_us
 	var view := aim.apply_sensitivity(raw_counts)
 	_record({
 		"type": "move", "ts_us": ts_us, "frame": frame, "tick": tick,
@@ -176,6 +180,7 @@ func _try_fire(ts_us: int, frame: int) -> void:
 	var kick := scenario.recoil_kick(_burst_shot)
 	_burst_shot += 1
 	if kick[0] != 0.0 or kick[1] != 0.0:
+		aim.event_us = ts_us
 		view = aim.apply_recoil(kick)
 		_record({
 			"type": "recoil", "ts_us": ts_us, "frame": frame, "tick": tick,
@@ -206,3 +211,30 @@ func _record_target(ts_us: int, frame: int) -> void:
 func _record(record: Dictionary) -> void:
 	if recorder != null:
 		recorder.write(record)
+	if telemetry != null:
+		_forward(record)
+
+
+## Mirrors one record into the rearguard.telemetry recorder (same fields, typed calls).
+func _forward(r: Dictionary) -> void:
+	var t := int(r.ts_us)
+	var f := int(r.frame)
+	var k := int(r.tick)
+	match r.type:
+		"move":
+			telemetry.record_move(t, f, k, float(r.dx), float(r.dy), r.yaw, r.pitch)
+		"button":
+			telemetry.record_button(t, f, k, r.pressed)
+		"fire":
+			telemetry.record_fire(t, f, k, r.shot, r.burst_shot, r.yaw, r.pitch,
+					r.target, r.target_yaw, r.target_pitch, r.hit)
+		"recoil":
+			telemetry.record_recoil(t, f, k, r.shot, r.burst_shot, r.kick_yaw, r.kick_pitch,
+					r.yaw, r.pitch)
+		"target":
+			telemetry.record_target(t, f, k, r.target, r.target_yaw, r.target_pitch)
+		"end":
+			telemetry.record_end(t, f, k, r.shots, r.hits, r.complete)
+			telemetry.close()
+		_:
+			pass # The header is written when the telemetry recorder is opened.

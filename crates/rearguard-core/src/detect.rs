@@ -482,7 +482,7 @@ impl Detector {
     }
 
     fn multiplier(&mut self, stream: Stream, ts_us: u64, session: Session) -> f64 {
-        let tick = (ts_us - session.probe_start_us) / 1_000;
+        let tick = telemetry::probe_tick(ts_us, session.probe_start_us);
         self.probe.drift(stream, tick).multiplier()
     }
 

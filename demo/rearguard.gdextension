@@ -1,0 +1,15 @@
+; Rearguard's Rust extension (crates/rearguard-godot, built with gdext 0.5.5, API 4.7).
+; Build it from the repository root first: cargo build -p rearguard-godot
+; Godot's "debug" libraries are used by the editor and by `godot --headless`.
+; Without a built library, Godot logs one load error and the aim range runs without
+; the probe (identity hooks).
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+linux.debug.x86_64 = "res://../target/debug/librearguard_godot.so"
+linux.release.x86_64 = "res://../target/release/librearguard_godot.so"
+windows.debug.x86_64 = "res://../target/debug/rearguard_godot.dll"
+windows.release.x86_64 = "res://../target/release/rearguard_godot.dll"

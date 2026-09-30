@@ -6,7 +6,8 @@
 extends RefCounted
 
 const FORMAT := "rearguard.aimrange.recording"
-const VERSION := 1
+## Version 2 (task 1.5) adds the probe_* header fields; see demo/README.md.
+const VERSION := 2
 
 ## When recording to memory: the lines written so far, and the records themselves.
 ## Keep `records` for exact comparisons: Godot's own JSON/float parser is not

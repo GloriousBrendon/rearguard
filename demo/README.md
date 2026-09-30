@@ -27,23 +27,35 @@ exactly this version. `project.godot` sets `config/features` to `4.7`.
 
 All commands are run from the repository root; `godot` is the 4.7.2 editor binary.
 
+The input probe comes from the Rust extension (`crates/rearguard-godot`), so build
+it first. Without it the range still runs, but without the probe (identity hooks),
+and Godot logs one "Can't open dynamic library" error.
+
 ```sh
+# Fresh checkout only: import BEFORE the first build (Godot 4.7.2 crashes on shutdown
+# after a first import that loads a GDExtension; see crates/rearguard-godot/README.md).
+godot --headless --path demo --import
+
+# Build the GDExtension library (target/debug); demo/rearguard.gdextension loads it.
+cargo build -p rearguard-godot
+
 # Play (windowed). Click to capture the mouse and start; Esc releases and pauses.
 godot --path demo -- --scenario flick --seed 7
 
 # Scripted bot, headless, faster than real time, then quit.
 godot --headless --path demo --fixed-fps 120 -- --bot --scenario spray --seed 7 --duration 20 --out /tmp/spray.jsonl
 
-# Tests (exit code 0 on success, 1 on any failure).
-godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
+# Tests (exit code 0 on success, 1 on any failure). The extension tests are skipped
+# if the library is not built, unless REARGUARD_REQUIRE_EXTENSION=1 (as in CI).
+REARGUARD_REQUIRE_EXTENSION=1 godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
 
 # Input statistics for one or more recordings.
 godot --headless --path demo --script res://tools/summarize_recording.gd -- /tmp/spray.jsonl
 ```
 
-On a fresh checkout, run `godot --headless --path demo --import` once first so
-Godot builds its `.godot/` cache (git-ignored). CI wraps each call in `timeout`
-(see "CI").
+On a fresh checkout, run `godot --headless --path demo --import` once first, before
+building the extension, so Godot builds its `.godot/` cache (git-ignored). CI wraps each
+call in `timeout` (see "CI").
 
 ## CI
 
@@ -60,6 +72,13 @@ task). It is independent of the Rust jobs and shows as its own check.
 3. It unpacks the zip, prints `godot --version`, runs the one-time `--import`
    (`timeout 300`), then the test command above (`timeout 600`). The job fails
    if any test fails, if a test file does not compile, or if no tests run.
+
+The job also installs the pinned Rust toolchain. Between the import and the tests it
+builds the extension (`cargo build --locked -p rearguard-godot`). It builds after the
+import because of the first-import crash described in `crates/rearguard-godot/README.md`,
+and removes any cached library before importing for the same reason. It runs the tests
+with `REARGUARD_REQUIRE_EXTENSION=1`, so the extension tests fail if the library does
+not load.
 
 To bump Godot, change these values together in one pull request:
 
@@ -89,6 +108,13 @@ Options (after `--`):
 | `--bot-seed N` | `1` | Seed for the bot's noise |
 | `--out PATH` | `user://recordings/<scenario>-seed<N>-<time>.jsonl` | Recording file |
 | `--quit` / `--no-quit` | off | Quit when the scenario ends |
+| `--no-probe` | probe on | Run without the input-probe drift (identity hooks) |
+| `--probe-seed-file PATH` | none | Probe seed file (64 hex digits), created with a fresh OS-random seed if missing. Without it, a random seed is kept in memory only, so the run can never be analysed |
+| `--probe-amplitude-ppm N` | `5000` | Drift amplitude, 0 to 20000 (0.5% default, 2% maximum) |
+| `--telemetry PATH` | none | Also write the session in the `rearguard.telemetry` schema (what a real client streams), through the extension |
+
+The seed file is the server's secret in this offline setting. Keep it apart from the
+recordings; it is never copied into them.
 
 `user://` is `~/.local/share/godot/app_userdata/Rearguard Aim Range/` on Linux and
 `%APPDATA%\Godot\app_userdata\Rearguard Aim Range\` on Windows. The path is
@@ -130,6 +156,14 @@ Both hooks are `Callable`s taking and returning `PackedFloat64Array([d_yaw,
 d_pitch])` in degrees. Both default to `identity`. Angles are kept as 64-bit
 floats throughout, because Godot's `Vector2` is 32-bit.
 
+With the probe on, `scripts/probe_hooks.gd` installs the drift on both hooks. Each
+hook multiplies the angle change by the extension's multiplier:
+`RearguardProbe.sensitivity_multiplier(ts)` for looks, and `recoil_scale(ts)` for
+recoil. `ts` is the event's timestamp, which `RangeSession` puts in `AimModel.event_us`
+before each `apply_*` call. The probe's tick 0 is the session's start (`probe_start_us`
+in the header), and an event's probe tick is `(ts_us - probe_start_us) / 1000`. All of
+the drift maths is in `rearguard-core`.
+
 Angle convention: yaw is Godot `rotation.y`, where positive turns left, and it is
 never wrapped. Pitch is `rotation.x`, where positive looks up, clamped to ±89°. At
 yaw 0 and pitch 0 the camera looks along -Z. Mouse right (+dx) turns right, and
@@ -150,7 +184,7 @@ endings. Every record has `type`, `ts_us`, `frame` and `tick`.
 
 | `type` | Written when | Extra fields |
 |--------|--------------|--------------|
-| `header` | First line | `format` (`"rearguard.aimrange.recording"`), `version` (1), `scenario`, `scenario_seed`, `duration_s`, `physics_hz`, `deg_per_count`, `recoil_pattern`, `target_distance_m`, `target_radius_m`, `source` (`human`/`bot`), `bot_seed`, `godot_version`, `os`, `display_driver`, `accumulated_input`, `delta_source`, `clock` |
+| `header` | First line | `format` (`"rearguard.aimrange.recording"`), `version` (2), `scenario`, `scenario_seed`, `duration_s`, `physics_hz`, `deg_per_count`, `recoil_pattern`, `target_distance_m`, `target_radius_m`, `source` (`human`/`bot`), `bot_seed`, `godot_version`, `os`, `display_driver`, `accumulated_input`, `delta_source`, `clock`, `probe_enabled`, `probe_amplitude_ppm`, `probe_start_us`, `probe_seed` (`"file"`, `"random"` or `"none"`: where the seed came from, never the seed) |
 | `move` | Every raw mouse motion event | `dx`, `dy`: raw counts before sensitivity. `yaw`, `pitch`: resulting view in degrees |
 | `button` | Fire button press or release | `button` (`"fire"`), `pressed` |
 | `fire` | Every shot | `shot` (run-wide index), `burst_shot`, `yaw`, `pitch` (view when fired, before recoil), `target`, `target_yaw`, `target_pitch`, `hit` |
@@ -158,10 +192,23 @@ endings. Every record has `type`, `ts_us`, `frame` and `tick`.
 | `target` | Flick or spray target appears | `target`, `target_yaw`, `target_pitch` |
 | `end` | Last line | `shots`, `hits`, `complete` (false if the window was closed early) |
 
-Replaying a recording from its own contents gives back every view angle exactly:
-start at yaw 0 and pitch 0, add `-dx × deg_per_count` and `-dy × deg_per_count`
-for each `move`, and the kick for each `recoil`. The tests check this, and so does
-a replay of the bot's output files in a correctly rounded parser.
+Replaying a recording gives back every view angle exactly:
+- start at yaw 0 and pitch 0;
+- for each `move`, add `-dx × deg_per_count` and `-dy × deg_per_count`;
+- for each `recoil`, add the kick.
+
+With the probe on (`probe_enabled`), multiply each `move`'s change by the sensitivity
+multiplier, and each kick by the recoil scale, at that record's `ts_us`. That needs the
+seed, so only the holder of the seed file can replay a probed recording.
+
+The tests check this, and so did a replay of the bot's output files in a correctly
+rounded parser. Version 1 (task 1.4) had no probe fields; a version-1 recording replays
+with identity multipliers.
+
+`--telemetry` writes a second file in the `rearguard.telemetry` v1 schema
+(`rearguard_core::telemetry`, what a real client streams). It has the same events, with
+`match_id` `"aimrange-local"`, `player_id` 0 and `source` `"client"`. The extension
+writes it, so its floats are exact.
 
 Precision: floats are written at full round-trip precision, and a correctly
 rounded parser reads them back bit for bit; this was checked with Python's parser
@@ -274,8 +321,10 @@ With accelerated input, the fast pass sums higher and fractional deltas appear.
 | `scripts/scenario.gd` | Seeded scenario generation and the fixed recoil pattern |
 | `scripts/recorder.gd` | JSON Lines writer (file or memory) and reader |
 | `scripts/scripted_bot.gd` | Scripted synthetic player for headless runs |
-| `scripts/*_test.gd` | Tests, one file beside each script |
-| `tests/` | Test runner and base class |
+| `scripts/probe_hooks.gd` | Installs the extension's drift multipliers on the two aim hooks |
+| `rearguard.gdextension` | Loads the Rust extension (`crates/rearguard-godot`) from `../target/` |
+| `scripts/*_test.gd` | Tests, one file beside each script; `probe_binding_test.gd` checks the extension |
+| `tests/` | Test runner and base class; `probe_golden.json` holds the core golden vectors the extension must reproduce |
 | `tools/summarize_recording.gd` | Input statistics for recordings |
 
 The bot is an ordinary aiming controller with a reaction delay and seeded noise.

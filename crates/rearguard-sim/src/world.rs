@@ -309,8 +309,7 @@ impl World {
     }
 
     fn multiplier(&mut self, stream: Stream, ts_us: u64) -> f64 {
-        // Probe tick rule from the telemetry schema.
-        let tick = (ts_us - START_US) / 1_000;
+        let tick = telemetry::probe_tick(ts_us, START_US);
         self.probe.drift(stream, tick).multiplier()
     }
 

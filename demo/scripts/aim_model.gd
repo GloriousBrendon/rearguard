@@ -7,7 +7,8 @@
 ##
 ## The view angle changes in exactly two places: apply_sensitivity() and
 ## apply_recoil(). Each passes its angle change through a hook (look_hook,
-## recoil_hook). Both hooks are identity for now; the drift replaces them later.
+## recoil_hook). Both default to identity; scripts/probe_hooks.gd installs the input-probe
+## drift, which depends on the event's time, so callers set event_us first.
 extends RefCounted
 
 const PITCH_LIMIT_DEG := 89.0
@@ -17,6 +18,9 @@ const DEFAULT_DEG_PER_COUNT := 0.022
 var deg_per_count: float = DEFAULT_DEG_PER_COUNT
 var yaw_deg: float = 0.0
 var pitch_deg: float = 0.0
+## Timestamp (microseconds, the recording's clock) of the event being applied, for
+## hooks that depend on time. RangeSession sets it before each apply_* call.
+var event_us: int = 0
 
 ## Look-path hook: takes the view change [d_yaw, d_pitch] in degrees derived from
 ## one raw delta and returns the change to apply.

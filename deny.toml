@@ -26,7 +26,20 @@ allow = [
 confidence-threshold = 0.93
 # Allow-list entries that no current crate uses are fine; the list is a policy.
 unused-allowed-license = "allow"
-exceptions = []
+# Decision D10: gdext (the Godot binding) is MPL-2.0. A narrow exception for exactly
+# the gdext crates, at exactly the pinned versions, so a gdext bump needs a fresh
+# review. They are reachable only from rearguard-godot (scripts/check-no-godot.sh
+# enforces that). gdext's files are never modified; see docs/licence-notes.md.
+exceptions = [
+    { crate = "godot@0.5.5", allow = ["MPL-2.0"] },
+    { crate = "godot-bindings@0.5.5", allow = ["MPL-2.0"] },
+    { crate = "godot-cell@0.5.5", allow = ["MPL-2.0"] },
+    { crate = "godot-codegen@0.5.5", allow = ["MPL-2.0"] },
+    { crate = "godot-core@0.5.5", allow = ["MPL-2.0"] },
+    { crate = "godot-ffi@0.5.5", allow = ["MPL-2.0"] },
+    { crate = "godot-macros@0.5.5", allow = ["MPL-2.0"] },
+    { crate = "gdextension-api@0.5.1", allow = ["MPL-2.0"] },
+]
 # Licences reach users through dev and build dependencies too (vendored sources,
 # test binaries), so check them, not just runtime dependencies.
 include-dev = true
