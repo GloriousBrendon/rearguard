@@ -1,4 +1,4 @@
-//! Rearguard core: engine-agnostic probe, protocol and detection logic.
+//! Rearguard core: engine-agnostic probe, telemetry protocol and detection logic.
 //!
 //! This crate must never depend on Godot or any other engine.
 
@@ -6,6 +6,7 @@
 
 pub mod probe;
 pub mod secret;
+pub mod telemetry;
 
 /// Version of the core crate, used by dependants to prove they link against it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

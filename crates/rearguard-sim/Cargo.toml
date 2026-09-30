@@ -6,7 +6,12 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+chacha20 = { version = "0.10", default-features = false, features = ["rng"] }
+libm = "0.2"
 rearguard-core.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
+zeroize = { version = "1.9", default-features = false }
 
 [lints]
 workspace = true
