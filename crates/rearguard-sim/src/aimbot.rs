@@ -320,6 +320,182 @@ impl AdaptiveAimbot {
     }
 }
 
+/// Closed-loop smoothing aimbot, the common "smooth aim" design: after a reaction
+/// delay, on every new frame it reads the actual view angle and moves `smoothing` of
+/// the remaining error toward the target, carrying the rounding remainder. It taps once
+/// the actual error (read from the game) is below `fire_error_deg`.
+///
+/// Because every step starts from the view the game really shows, the drift's effect
+/// on earlier steps is corrected by later ones; only the last step's share is left.
+#[derive(Debug)]
+pub struct SmoothingAimbot {
+    deg_per_count: f64,
+    smoothing: f64,
+    reaction_us: u64,
+    fire_error_deg: f64,
+    engaged: Option<u64>,
+    active_from_us: u64,
+    last_frame: usize,
+    carry: [f64; 2],
+    tap: Tap,
+}
+
+impl SmoothingAimbot {
+    /// Moves `smoothing` (0 < smoothing <= 1) of the error per frame, starting
+    /// `reaction_us` after a target appears, and taps below `fire_error_deg`.
+    #[must_use]
+    pub fn new(deg_per_count: f64, smoothing: f64, reaction_us: u64, fire_error_deg: f64) -> Self {
+        Self {
+            deg_per_count,
+            smoothing,
+            reaction_us,
+            fire_error_deg,
+            engaged: None,
+            active_from_us: 0,
+            last_frame: 0,
+            carry: [0.0, 0.0],
+            tap: Tap::default(),
+        }
+    }
+
+    /// One millisecond.
+    pub fn step(&mut self, now_us: u64, frames: &[Frame], out: &mut Vec<Input>) {
+        let frame = frames[frames.len() - 1];
+        // A miss is simply more error to smooth away.
+        self.tap.step(&frame, out);
+        if self.engaged != Some(frame.target_index) {
+            self.engaged = Some(frame.target_index);
+            self.active_from_us = now_us + self.reaction_us;
+            self.carry = [0.0, 0.0];
+        }
+        // Act once per frame, on the first millisecond after it is shown.
+        if now_us < self.active_from_us || frames.len() == self.last_frame {
+            return;
+        }
+        self.last_frame = frames.len();
+        let error = aim_error(&frame);
+        let distance = libm::sqrt(error[0] * error[0] + error[1] * error[1]);
+        if distance < self.fire_error_deg && self.tap.ready(now_us) {
+            self.tap.press(now_us, &frame, out);
+        }
+        let mut counts = [0i32; 2];
+        for axis in 0..2 {
+            let want = self.carry[axis] - self.smoothing * error[axis] / self.deg_per_count;
+            let whole = want.round();
+            self.carry[axis] = want - whole;
+            counts[axis] = whole as i32;
+        }
+        if counts != [0, 0] {
+            out.push(Input::Move {
+                dx: counts[0],
+                dy: counts[1],
+            });
+        }
+    }
+}
+
+/// Faster-measuring adaptive aimbot. Like [`AdaptiveAimbot`] it knows a small drift
+/// exists but not the seed, and it computes one open-loop flick per target and fires
+/// at once. It differs in two ways: it reacts in 30 ms, like [`FlickAimbot`], so it
+/// flicks (and so measures) about every 110 ms instead of every 200+ ms; and it
+/// estimates the multiplier by least squares over all of its own moves observed in the
+/// last `window_us`. The newest measurement always counts, however old, so a window
+/// shorter than the gap between flicks means "the last flick only".
+#[derive(Debug)]
+pub struct FastAdaptiveAimbot {
+    deg_per_count: f64,
+    reaction_us: u64,
+    window_us: u64,
+    estimate: f64,
+    /// Measured moves: (time observed, nominal view change, actual view change).
+    samples: std::collections::VecDeque<(u64, [f64; 2], [f64; 2])>,
+    engaged: Option<u64>,
+    act_at_us: Option<u64>,
+    tap: Tap,
+    pending: Option<(usize, [f64; 2], [f64; 2])>,
+}
+
+impl FastAdaptiveAimbot {
+    /// Reacts `reaction_us` after a target appears; estimates over `window_us`.
+    #[must_use]
+    pub fn new(deg_per_count: f64, reaction_us: u64, window_us: u64) -> Self {
+        Self {
+            deg_per_count,
+            reaction_us,
+            window_us,
+            estimate: 1.0,
+            samples: std::collections::VecDeque::new(),
+            engaged: None,
+            act_at_us: None,
+            tap: Tap::default(),
+            pending: None,
+        }
+    }
+
+    /// The current multiplier estimate.
+    #[must_use]
+    pub fn estimate(&self) -> f64 {
+        self.estimate
+    }
+
+    fn update_estimate(&mut self, now_us: u64) {
+        while self.samples.len() > 1
+            && self
+                .samples
+                .front()
+                .is_some_and(|(t, _, _)| *t + self.window_us < now_us)
+        {
+            self.samples.pop_front();
+        }
+        let (mut num, mut den) = (0.0, 0.0);
+        for (_, nominal, actual) in &self.samples {
+            num += actual[0] * nominal[0] + actual[1] * nominal[1];
+            den += nominal[0] * nominal[0] + nominal[1] * nominal[1];
+        }
+        if den > 0.0 {
+            self.estimate = num / den;
+        }
+    }
+
+    /// One millisecond.
+    pub fn step(&mut self, now_us: u64, frames: &[Frame], out: &mut Vec<Input>) {
+        let frame = frames[frames.len() - 1];
+        if self.tap.step(&frame, out) {
+            self.act_at_us = Some(now_us + 30_000);
+        }
+        if let Some((seen, before, nominal)) = self.pending
+            && frames.len() > seen
+        {
+            self.pending = None;
+            let after = frames[seen].view;
+            self.samples.push_back((
+                now_us,
+                nominal,
+                [after[0] - before[0], after[1] - before[1]],
+            ));
+        }
+        if self.engaged != Some(frame.target_index) {
+            self.engaged = Some(frame.target_index);
+            self.act_at_us = Some(now_us + self.reaction_us);
+        }
+        if self.act_at_us.is_some_and(|t| now_us >= t)
+            && self.pending.is_none()
+            && self.tap.ready(now_us)
+        {
+            self.act_at_us = None;
+            self.update_estimate(now_us);
+            let [dx, dy] = counts_for(aim_error(&frame), self.deg_per_count, self.estimate);
+            out.push(Input::Move { dx, dy });
+            self.tap.press(now_us, &frame, out);
+            let nominal = [
+                -f64::from(dx) * self.deg_per_count,
+                -f64::from(dy) * self.deg_per_count,
+            ];
+            self.pending = Some((frames.len(), frame.view, nominal));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

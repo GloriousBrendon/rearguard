@@ -9,7 +9,7 @@ use rearguard_core::telemetry::{self, Record};
 use super::*;
 use crate::generate::{Options, generate};
 use crate::seed::SimSeed;
-use crate::session::{Class, Session, SessionSpec, run_session};
+use crate::session::{Class, ModelParams, Session, SessionSpec, run_session};
 use crate::validation::{DriftCorrelation, Unit, drift_correlation, units};
 use crate::world::Scenario;
 
@@ -25,6 +25,7 @@ fn spec(class: Class, scenario: Scenario, index: u32, duration_s: f64) -> Sessio
         index,
         duration_s,
         amplitude: Amplitude::DEFAULT,
+        models: ModelParams::DEFAULT,
     }
 }
 
@@ -41,12 +42,25 @@ fn measure(
     scenario: Scenario,
     sessions: u32,
 ) -> (DriftCorrelation, usize, usize) {
+    measure_with(seed, class, scenario, sessions, ModelParams::DEFAULT)
+}
+
+/// [`measure`] with non-default cheat-model tuning.
+fn measure_with(
+    seed: u64,
+    class: Class,
+    scenario: Scenario,
+    sessions: u32,
+    models: ModelParams,
+) -> (DriftCorrelation, usize, usize) {
     let sim_seed = SimSeed::new(seed);
     let root = sim_seed.probe_root();
     let mut all: Vec<Unit> = Vec::new();
     let (mut shots, mut hits) = (0, 0);
     for index in 0..sessions {
-        let session = run_session(&sim_seed, &root, spec(class, scenario, index, 60.0));
+        let mut spec = spec(class, scenario, index, 60.0);
+        spec.models = models;
+        let session = run_session(&sim_seed, &root, spec);
         shots += session.truth.len();
         hits += session.truth.iter().filter(|t| t.hit).count();
         all.extend(units(scenario, &session.truth));
@@ -123,6 +137,60 @@ fn adaptive_aimbot_error_follows_drift() {
     assert_open_loop(Class::AdaptiveAimbot, Scenario::Flick, 10);
 }
 
+// Task 1.2a models. The smoothing aimbot corrects from the view it actually sees,
+// so it is held to the closed-loop standard (|z| < 3 at 30 sessions, the same volume
+// as the spray tests; its 300-session slope is -0.07, reaching |z| = 4 only after
+// about 64,000 shots). The fast adaptive aimbot cancels most of the drift (slope about
+// 0.07 with the default 250 ms window) but its error has so little other noise that it
+// stays visible: z > 4 at 10 sessions, with a slope below the 0.2 open-loop bar.
+
+#[test]
+fn smoothing_aimbot_error_is_not_correlated_with_drift() {
+    assert_closed_loop(Class::SmoothingAimbot, Scenario::Flick, 30);
+}
+
+#[test]
+fn fast_adaptive_aimbot_cancels_most_drift_but_stays_visible() {
+    let (c, shots, _) = measure(1, Class::FastAdaptiveAimbot, Scenario::Flick, 10);
+    assert!(shots > 500, "{shots} shots");
+    assert!(c.z > 4.0 && c.slope > 0.0 && c.slope < 0.2, "{c:?}");
+}
+
+#[test]
+fn fast_adaptive_window_sets_how_much_drift_survives() {
+    let slope = |estimation_window_ms| {
+        let models = ModelParams {
+            estimation_window_ms,
+            ..ModelParams::DEFAULT
+        };
+        measure_with(1, Class::FastAdaptiveAimbot, Scenario::Flick, 5, models)
+            .0
+            .slope
+    };
+    // A long window averages stale measurements, so more of the drift survives.
+    let (short, long) = (slope(100), slope(20_000));
+    assert!(short < 0.1 && long > 0.8, "short {short}, long {long}");
+}
+
+#[test]
+fn smoothing_factor_sets_convergence_speed() {
+    // More smoothing per frame reaches each target sooner, so more targets are hit in
+    // the same time (until the weapon's fire rate is the limit).
+    let shots_in_20s = |smoothing| {
+        let mut spec = spec(Class::SmoothingAimbot, Scenario::Flick, 0, 20.0);
+        spec.models = ModelParams {
+            smoothing,
+            ..ModelParams::DEFAULT
+        };
+        session(4, spec).truth.len()
+    };
+    let (slow, fast) = (shots_in_20s(0.05), shots_in_20s(0.4));
+    assert!(
+        fast > slow * 2,
+        "0.05: {slow} shots, 0.4: {fast} shots in 20 s"
+    );
+}
+
 #[test]
 fn without_drift_there_is_nothing_to_correlate() {
     let seed = SimSeed::new(3);
@@ -143,7 +211,7 @@ fn print_model_report() {
             for &scenario in class.scenarios() {
                 let (c, shots, hits) = measure(1, class, scenario, sessions);
                 println!(
-                    "  {:<17} {:<6} shots {shots:>6}  hit {:>5.1}%  r {:>+.3}  null sd {:.3}  z {:>+7.1}  slope {:>+.3}",
+                    "  {:<20} {:<6} shots {shots:>6}  hit {:>5.1}%  r {:>+.3}  null sd {:.3}  z {:>+7.1}  slope {:>+.3}",
                     class.name(),
                     scenario.name(),
                     100.0 * hits as f64 / shots.max(1) as f64,
@@ -178,6 +246,53 @@ fn print_human_leak() {
             c.slope,
             se
         );
+    }
+}
+
+/// Shots needed for z = 4, extrapolated from a measurement (z grows with the square
+/// root of the number of shots); `None` when the measurement is too weak to say.
+fn shots_for_z4(c: &DriftCorrelation, shots: usize) -> Option<f64> {
+    (c.z.abs() >= 2.0).then(|| shots as f64 * (4.0 / c.z) * (4.0 / c.z))
+}
+
+fn print_row(label: &str, c: &DriftCorrelation, shots: usize) {
+    let volume =
+        shots_for_z4(c, shots).map_or_else(|| "      n/a".to_owned(), |n| format!("{n:>9.0}"));
+    println!(
+        "  {label:<34} shots {shots:>7}  r {:>+.4}  z {:>+7.1}  slope {:>+.3}  shots for z=4 {volume}",
+        c.r, c.z, c.slope
+    );
+}
+
+#[test]
+#[ignore = "sweeps the task 1.2a closed-loop and fast adaptive aimbots; run with --release"]
+fn print_closed_loop_report() {
+    println!("smoothing-aimbot, 30 sessions x 60 s, by smoothing factor");
+    for smoothing in [0.05, 0.1, 0.2, 0.4, 0.7, 1.0] {
+        let models = ModelParams {
+            smoothing,
+            ..ModelParams::DEFAULT
+        };
+        let (c, shots, _) = measure_with(1, Class::SmoothingAimbot, Scenario::Flick, 30, models);
+        print_row(&format!("smoothing {smoothing}"), &c, shots);
+    }
+    println!("fast-adaptive-aimbot, 30 sessions x 60 s, by estimation window");
+    for window in [10, 50, 125, 250, 1_000, 5_000, 20_000] {
+        let models = ModelParams {
+            estimation_window_ms: window,
+            ..ModelParams::DEFAULT
+        };
+        let (c, shots, _) = measure_with(1, Class::FastAdaptiveAimbot, Scenario::Flick, 30, models);
+        print_row(&format!("window {window} ms"), &c, shots);
+    }
+    println!("defaults, 300 sessions x 60 s (seed 2)");
+    for class in [
+        Class::SmoothingAimbot,
+        Class::FastAdaptiveAimbot,
+        Class::Human,
+    ] {
+        let (c, shots, _) = measure(2, class, Scenario::Flick, 300);
+        print_row(class.name(), &c, shots);
     }
 }
 
@@ -231,6 +346,10 @@ fn sessions_are_reproducible_and_seed_dependent() {
 /// the whole simulation (models, RNG, libm, probe, serialisation) across platforms: CI
 /// checks them on Linux and Windows. Regenerate with `cargo test -p rearguard-sim
 /// print_golden_hashes -- --ignored --nocapture` after an intentional model change.
+///
+/// History: task 1.2a added the last two rows (the new smoothing and fast adaptive
+/// aimbots). The first six are unchanged, because new classes are appended to
+/// `Class::ALL` and so leave every existing class's random streams alone.
 const GOLDEN_HASHES: &[(&str, &str, u64)] = &[
     ("human", "flick", 0x5679461e8873c0ee),
     ("human", "spray", 0x0a4b0e0516da980d),
@@ -238,6 +357,8 @@ const GOLDEN_HASHES: &[(&str, &str, u64)] = &[
     ("flick-aimbot", "flick", 0x287fbe41d1506a00),
     ("humanised-aimbot", "flick", 0x07ff09b885ae3dd5),
     ("adaptive-aimbot", "flick", 0xf47113f33c207518),
+    ("smoothing-aimbot", "flick", 0x9bd028aa121b62a9),
+    ("fast-adaptive-aimbot", "flick", 0xa6bdaa5be1abe5a0),
 ];
 
 fn golden_rows() -> Vec<(&'static str, &'static str, u64)> {
@@ -415,6 +536,7 @@ fn generate_writes_n_sessions_per_class_reproducibly() {
         duration_s: 3.0,
         amplitude: Amplitude::DEFAULT,
         classes: Class::ALL.to_vec(),
+        models: ModelParams::DEFAULT,
     };
     let (a, b, c) = (TempDir::new("a"), TempDir::new("b"), TempDir::new("c"));
     let manifest = generate(&SimSeed::new(9), &options, &a.0).unwrap();

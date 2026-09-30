@@ -3,10 +3,13 @@
 use rearguard_core::probe::{Amplitude, ProbeConfig, ProbeGenerator, RootSeed};
 use rearguard_core::telemetry::Record;
 
-use crate::aimbot::{AdaptiveAimbot, FlickAimbot, HumanisedAimbot, HumanisedParams};
+use crate::aimbot::{
+    AdaptiveAimbot, FastAdaptiveAimbot, FlickAimbot, HumanisedAimbot, HumanisedParams,
+    SmoothingAimbot,
+};
 use crate::human::{Human, HumanParams, RecoilControl};
 use crate::seed::SimSeed;
-use crate::world::{Input, Scenario, ShotTruth, World, WorldConfig};
+use crate::world::{Input, Scenario, ShotTruth, World, WorldConfig, target_angular_radius_deg};
 
 /// A kind of simulated player.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,16 +24,25 @@ pub enum Class {
     HumanisedAimbot,
     /// Adaptive aimbot: estimates the drift from its own moves. Plays flick.
     AdaptiveAimbot,
+    /// Closed-loop smoothing aimbot: each frame, a fraction of the actual remaining
+    /// error. Plays flick.
+    SmoothingAimbot,
+    /// Faster-measuring adaptive aimbot: 30 ms reactions, least-squares drift
+    /// estimate over a time window. Plays flick.
+    FastAdaptiveAimbot,
 }
 
 impl Class {
-    /// Every class, in output order.
-    pub const ALL: [Self; 5] = [
+    /// Every class, in output order. New classes go at the end: a class's position
+    /// numbers its random streams, so appending keeps existing sessions unchanged.
+    pub const ALL: [Self; 7] = [
         Self::Human,
         Self::RecoilMacro,
         Self::FlickAimbot,
         Self::HumanisedAimbot,
         Self::AdaptiveAimbot,
+        Self::SmoothingAimbot,
+        Self::FastAdaptiveAimbot,
     ];
 
     /// Name used on the command line and in the manifest.
@@ -42,6 +54,8 @@ impl Class {
             Self::FlickAimbot => "flick-aimbot",
             Self::HumanisedAimbot => "humanised-aimbot",
             Self::AdaptiveAimbot => "adaptive-aimbot",
+            Self::SmoothingAimbot => "smoothing-aimbot",
+            Self::FastAdaptiveAimbot => "fast-adaptive-aimbot",
         }
     }
 
@@ -57,14 +71,18 @@ impl Class {
         match self {
             Self::Human => &[Scenario::Flick, Scenario::Spray],
             Self::RecoilMacro => &[Scenario::Spray],
-            Self::FlickAimbot | Self::HumanisedAimbot | Self::AdaptiveAimbot => &[Scenario::Flick],
+            Self::FlickAimbot
+            | Self::HumanisedAimbot
+            | Self::AdaptiveAimbot
+            | Self::SmoothingAimbot
+            | Self::FastAdaptiveAimbot => &[Scenario::Flick],
         }
     }
 
     /// Whether the class aims open-loop (and so should follow the drift).
     #[must_use]
     pub fn open_loop(self) -> bool {
-        self != Self::Human
+        !matches!(self, Self::Human | Self::SmoothingAimbot)
     }
 }
 
@@ -81,6 +99,33 @@ pub struct SessionSpec {
     pub duration_s: f64,
     /// Probe drift amplitude.
     pub amplitude: Amplitude,
+    /// Tuning of the configurable cheat models.
+    pub models: ModelParams,
+}
+
+/// Tuning of the configurable cheat models. Other classes ignore it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ModelParams {
+    /// [`Class::SmoothingAimbot`]: fraction of the remaining error moved per frame,
+    /// in (0, 1].
+    pub smoothing: f64,
+    /// [`Class::FastAdaptiveAimbot`]: estimation window, milliseconds.
+    pub estimation_window_ms: u32,
+}
+
+impl ModelParams {
+    /// Smoothing 0.2 per frame (at 120 frames per second, a time constant of about
+    /// 40 ms); estimation window 250 ms (the last two or three flicks).
+    pub const DEFAULT: Self = Self {
+        smoothing: 0.2,
+        estimation_window_ms: 250,
+    };
+}
+
+impl Default for ModelParams {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 /// One simulated session.
@@ -121,6 +166,8 @@ enum Agent {
     Flick(FlickAimbot),
     Humanised(Box<HumanisedAimbot>),
     Adaptive(Box<AdaptiveAimbot>),
+    Smoothing(SmoothingAimbot),
+    FastAdaptive(Box<FastAdaptiveAimbot>),
 }
 
 /// Simulates one session. `root` must be `seed.probe_root()`; it is passed in so
@@ -156,6 +203,17 @@ pub fn run_session(seed: &SimSeed, root: &RootSeed, spec: SessionSpec) -> Sessio
             deg_per_count,
             0.15,
             0.5,
+        ))),
+        Class::SmoothingAimbot => Agent::Smoothing(SmoothingAimbot::new(
+            deg_per_count,
+            spec.models.smoothing,
+            30_000,
+            0.25 * target_angular_radius_deg(),
+        )),
+        Class::FastAdaptiveAimbot => Agent::FastAdaptive(Box::new(FastAdaptiveAimbot::new(
+            deg_per_count,
+            30_000,
+            u64::from(spec.models.estimation_window_ms) * 1_000,
         ))),
     };
 
@@ -194,6 +252,8 @@ pub fn run_session(seed: &SimSeed, root: &RootSeed, spec: SessionSpec) -> Sessio
                 Agent::Flick(a) => a.step(now, frames, &mut batch),
                 Agent::Humanised(a) => a.step(now, frames, &mut batch),
                 Agent::Adaptive(a) => a.step(now, frames, &mut batch),
+                Agent::Smoothing(a) => a.step(now, frames, &mut batch),
+                Agent::FastAdaptive(a) => a.step(now, frames, &mut batch),
             }
         }
         world.step_frame(&batch);

@@ -14,12 +14,13 @@ use rearguard_core::telemetry;
 use serde::Serialize;
 
 use crate::seed::SimSeed;
-use crate::session::{Class, SessionSpec, run_session};
+use crate::session::{Class, ModelParams, SessionSpec, run_session};
 
 /// Value of [`Manifest::format`].
 pub const MANIFEST_FORMAT: &str = "rearguard.sim.manifest";
 /// Value of [`Manifest::version`].
-pub const MANIFEST_VERSION: u32 = 1;
+/// Version 2 (task 1.2a) added `smoothing` and `estimation_window_ms`.
+pub const MANIFEST_VERSION: u32 = 2;
 
 /// What to generate.
 #[derive(Clone, Debug, PartialEq)]
@@ -32,6 +33,8 @@ pub struct Options {
     pub amplitude: Amplitude,
     /// Classes to simulate.
     pub classes: Vec<Class>,
+    /// Tuning of the configurable cheat models.
+    pub models: ModelParams,
 }
 
 /// Describes a generated batch. Holds the class labels, so keep it away from anything
@@ -54,6 +57,10 @@ pub struct Manifest {
     pub amplitude_ppm: u32,
     /// Probe signal shape.
     pub probe_shape: String,
+    /// Smoothing factor of `smoothing-aimbot` sessions.
+    pub smoothing: f64,
+    /// Estimation window of `fast-adaptive-aimbot` sessions, milliseconds.
+    pub estimation_window_ms: u32,
     /// One entry per session file.
     pub sessions: Vec<ManifestEntry>,
 }
@@ -104,6 +111,7 @@ pub fn generate(seed: &SimSeed, options: &Options, dir: &Path) -> io::Result<Man
                     index,
                     duration_s: options.duration_s,
                     amplitude: options.amplitude,
+                    models: options.models,
                 };
                 let session = run_session(seed, &root, spec);
                 let file = format!("{}/{}-{index:04}.jsonl", class.name(), scenario.name());
@@ -131,6 +139,8 @@ pub fn generate(seed: &SimSeed, options: &Options, dir: &Path) -> io::Result<Man
         duration_s: options.duration_s,
         amplitude_ppm: options.amplitude.ppm(),
         probe_shape: "band-limited noise (default)".to_owned(),
+        smoothing: options.models.smoothing,
+        estimation_window_ms: options.models.estimation_window_ms,
         sessions: entries,
     };
     let mut text = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;

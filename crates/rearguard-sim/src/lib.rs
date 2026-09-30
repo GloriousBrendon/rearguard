@@ -1,6 +1,6 @@
 //! Rearguard sim: the closed test environment for synthetic players and test cheats.
 //!
-//! Simulated players (a closed-loop human model, a recoil macro and three aimbots)
+//! Simulated players (a closed-loop human model, a recoil macro and five aimbots)
 //! play a Rust mirror of the Godot aim range under the input-probe drift, and emit the
 //! same telemetry a real client would ([`rearguard_core::telemetry`]).
 //!

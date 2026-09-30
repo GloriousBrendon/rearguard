@@ -31,7 +31,9 @@ cargo run --release -p rearguard-sim -- --out /tmp/sim-batch --seed 42 --session
 | `--sessions N` | 10 | Sessions per class *and scenario* |
 | `--duration S` | 60 | Session length, seconds of game time |
 | `--amplitude-ppm P` | 5000 | Probe drift amplitude, 0 to 20000 |
-| `--classes A,B` | all | Any of `human`, `recoil-macro`, `flick-aimbot`, `humanised-aimbot`, `adaptive-aimbot` |
+| `--classes A,B` | all | Any of `human`, `recoil-macro`, `flick-aimbot`, `humanised-aimbot`, `adaptive-aimbot`, `smoothing-aimbot`, `fast-adaptive-aimbot` |
+| `--smoothing F` | 0.2 | `smoothing-aimbot`: fraction of the remaining error moved per frame, 0 < F ≤ 1 |
+| `--estimation-window-ms W` | 250 | `fast-adaptive-aimbot`: drift estimation window, 1 to 60000 ms |
 
 Output:
 
@@ -72,9 +74,12 @@ and 0.044° per count. The demo's `tracking` scenario is not simulated yet.
 | `flick-aimbot` | flick | 30 ms after a target appears, one move of the exact counts to the target (from the game's own angles), then a tap |
 | `humanised-aimbot` | flick | A log-normal reaction of about 200 ms, then a minimum-jerk path planned once to a random point on the target (σ 0.1° to 0.2°), with per-millisecond jitter, then a click |
 | `adaptive-aimbot` | flick | Knows a small drift exists, but not the seed. After each flick it reads the view change its own move caused, keeps a running estimate of the multiplier (weight 0.5 for the newest measurement), and divides the next flick's counts by it. Human-like 150 ms reactions |
+| `smoothing-aimbot` | flick | Closed loop (task 1.2a), the common "smooth aim" design. 30 ms after a target appears, on every frame it reads the actual view and moves `--smoothing` of the remaining error toward the target, carrying the rounding remainder. It taps once the actual error is below a quarter of the target radius and the weapon is ready |
+| `fast-adaptive-aimbot` | flick | Open-loop flicks with fast drift estimation (task 1.2a). Reacts in 30 ms, so it flicks and measures about every 110 ms. Before each flick it estimates the multiplier by least squares over its own moves observed in the last `--estimation-window-ms` (the newest always counts, so a short window means "the last flick only"), divides the flick's counts by it, and fires at once |
 
-Every aimbot waits for the weapon to be ready and re-aims only after a real miss, so
-no flick is corrected before its shot. Per-session parameters for humans and
+Every aimbot waits for the weapon to be ready. The flicking aimbots re-aim only after
+a real miss, so no flick is corrected before its shot. The smoothing aimbot, by
+design, corrects every frame, including while it waits for the weapon. Per-session parameters for humans and
 humanised aimbots are drawn from the ranges in `human.rs` and `aimbot.rs`.
 
 ## Does the error follow the drift?
@@ -96,7 +101,11 @@ Measured with `cargo test --release -p rearguard-sim print_model_report -- --ign
 | flick-aimbot | flick | 16,380 | +0.990 | +135.4 | +1.00 |
 | humanised-aimbot | flick | 2,552 | +0.319 | +21.2 | +1.01 |
 | adaptive-aimbot | flick | 11,563 | +0.438 | +54.2 | +0.26 |
+| smoothing-aimbot | flick | 9,520 | −0.015 | −1.7 | −0.09 |
+| fast-adaptive-aimbot | flick | 16,380 | +0.173 | +25.9 | +0.07 |
 
+The last two rows use the defaults (smoothing 0.2, window 250 ms). The existing rows
+are unchanged from task 1.2.
 Slope 1 means the error contains all of the drift's effect, and 0 means none of it.
 Human slopes at this volume are very noisy, because the drift's effect on a human is
 tiny compared with its other errors.
@@ -120,6 +129,70 @@ What the models show (about the models, see the note at the top):
 - **The humanised aimbot passes all of the drift through (slope ≈ 1).** Its random aim
   point dilutes r to about 0.3.
 
+### Task 1.2a: closed-loop smoothing and faster adaptation
+
+From `cargo test --release -p rearguard-sim print_closed_loop_report -- --ignored
+--nocapture`. "Shots for z = 4" extrapolates the measured z by the square root of the
+shot count. The aim range is dense (this bot fires about 300 to 550 shots a minute);
+real matches have far fewer engagements per minute.
+
+| Model, 30 sessions × 60 s unless stated | Shots | r | z | Slope | Shots for z = 4 |
+|---|---:|---:|---:|---:|---:|
+| smoothing 0.05 | 2,573 | −0.009 | −0.6 | −0.06 | n/a |
+| smoothing 0.1 | 5,026 | −0.005 | −0.4 | −0.03 | n/a |
+| smoothing 0.2 (default) | 9,520 | −0.016 | −1.7 | −0.09 | n/a |
+| smoothing 0.4 | 15,397 | +0.010 | +1.3 | +0.03 | n/a |
+| smoothing 0.7 | 15,420 | +0.001 | +0.1 | +0.00 | n/a |
+| smoothing 1.0 | 15,420 | +0.002 | +0.4 | +0.00 | n/a |
+| smoothing 0.2, 300 sessions (seed 2) | 95,245 | −0.013 | −4.9 | −0.07 | ~64,000 |
+| window ≤ 125 ms (last flick only) | 16,380 | +0.089 | +13.0 | +0.03 | ~1,500 |
+| window 250 ms (default) | 16,380 | +0.173 | +25.9 | +0.07 | ~390 |
+| window 1 s | 16,380 | +0.573 | +91.6 | +0.52 | ~30 |
+| window 5 s | 16,380 | +0.867 | +141.8 | +0.87 | ~13 |
+| window 20 s | 16,380 | +0.937 | +150.9 | +0.94 | ~12 |
+| window 250 ms, 300 sessions (seed 2) | 163,800 | +0.196 | +84.5 | +0.08 | ~370 |
+| human flick, 300 sessions (seed 2), for comparison | 25,692 | +0.038 | +8.4 | +0.26 | ~5,800 |
+
+Conclusions (about these models):
+
+- **The closed-loop smoothing aimbot is effectively invisible to this drift
+  correlation.** At 30 minutes no smoothing factor from 0.05 to 1.0 comes near the
+  null threshold (|z| ≤ 1.7). Every step starts from the view the game really shows,
+  so later steps remove what the drift did to earlier ones. Even at smoothing 1.0 the
+  bot must wait for the weapon (100 ms between shots) and keeps correcting while it
+  waits. Over 5 hours (95,245 shots) a weak *negative* correlation appears (slope
+  −0.07, z −4.9), needing about 64,000 shots for |z| = 4. That is ten times the
+  volume the human model's own leak needs, and of the opposite sign.
+
+  The fire-time error correlation cannot catch this design. Catching it would need a
+  different signature: the drift's effect on the per-frame step sizes, or the
+  trajectory shape. That is detector work, out of scope here.
+- **The faster adaptive aimbot is visible, and becomes more visible the slower it
+  adapts.** With the default 250 ms window it cancels about 93% of the drift (slope
+  0.07). Its error has almost no other noise, though, so r stays at 0.17, and about
+  400 shots reach z = 4. Using only its last flick (about 110 ms old) it cancels 97%
+  (slope 0.03), and it still needs only about 1,500 shots. Windows of a second or
+  more average stale measurements and approach the plain flick aimbot.
+
+  By significance alone the fastest variant (about 1,500 shots) is easier to catch
+  than the leaky human (about 5,800). By slope it looks *less* like a cheat than the
+  human does (0.03 against 0.26). A detector has to weigh slope against the residual
+  noise, not either alone.
+
+Limits of the two models:
+
+- **Smoothing aimbot:** no noise, no random aim point, and a fixed 30 ms reaction.
+  Real smoothing aimbots add noise and randomise the smoothing, which would only make
+  the drift harder to see. It reads the exact view and target, as a memory-reading
+  cheat would.
+- **Fast adaptive aimbot:** it can measure only through its own flicks, about one
+  every 110 ms. A cheat that also injected small probing moves between flicks, or
+  read the multiplier straight from the game's memory, could cancel the drift almost
+  completely. That is not modelled. Nor is a variant that flicks, re-reads the view
+  and corrects before firing; that is closed-loop at fire time and behaves like the
+  smoothing aimbot.
+- Both play only the flick scenario, and neither is fitted to any real cheat.
+
 ## Tests
 
 `cargo test -p rearguard-sim` runs in a few seconds, and covers:
@@ -131,7 +204,8 @@ What the models show (about the models, see the note at the top):
   checks the stream carries everything decision D2 needs;
 - batch generation.
 
-The two report tests above are `#[ignore]`d. Run them with `--release`.
+The three report tests (`print_model_report`, `print_human_leak`,
+`print_closed_loop_report`) are `#[ignore]`d. Run them with `--release`.
 
 Determinism across platforms comes from three things:
 - every random draw is a ChaCha20 stream keyed by the seed and numbered by purpose;
