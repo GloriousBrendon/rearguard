@@ -181,7 +181,8 @@ async fn replayed_skipped_and_foreign_chunks_are_rejected() {
     assert!(is_error(
         &client
             .request(&ClientMessage::Hello {
-                client: "again".into()
+                client: "again".into(),
+                label: None,
             })
             .await
             .unwrap(),
@@ -295,7 +296,10 @@ async fn the_open_session_cap_holds() {
     hello(&mut a).await;
     let mut b = Client::connect(server.addr).await.unwrap();
     let reply = b
-        .request(&ClientMessage::Hello { client: "b".into() })
+        .request(&ClientMessage::Hello {
+            client: "b".into(),
+            label: None,
+        })
         .await
         .unwrap();
     assert!(is_error(&reply, ErrorCode::ServerBusy), "{reply:?}");

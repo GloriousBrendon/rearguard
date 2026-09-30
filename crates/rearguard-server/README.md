@@ -17,6 +17,7 @@ cargo run --release -p rearguard-server -- gen-secret server-master.hex   # once
 cp crates/rearguard-server/config/server.example.json server.json          # then edit
 cargo run --release -p rearguard-server -- run --config server.json        # until Ctrl-C
 cargo run --release -p rearguard-server -- verdict --db rearguard.sqlite3 --session ID
+cargo run --release -p rearguard-server -- labels --db rearguard.sqlite3   # evaluation harness
 ```
 
 Relative paths in the config are resolved from the config file's directory. Ctrl-C
@@ -77,10 +78,14 @@ These must be recalibrated on real players (task 1.10).
 ## Protocol
 
 This is `rearguard_core::protocol`. Each frame is a `u32` little-endian length, then a
-version byte (1), then a postcard-encoded message.
+version byte (2), then a postcard-encoded message.
 
-1. `Hello`: the server opens a session and replies `Welcome` (session id, resume
-   token, `match_id`, `player_id`, epoch 0, epoch seed, amplitude).
+1. `Hello { client, label }`: the server opens a session and replies `Welcome`
+   (session id, resume token, `match_id`, `player_id`, epoch 0, epoch seed,
+   amplitude). `label` is an optional ground-truth label from Rearguard's own test
+   environment (the test cheats of task 1.8, `demo/scripts/test_cheats/`). It is stored
+   with the session for the evaluation harness and never given to the detector.
+   Version 2 of the protocol added it; a version 1 client gets `UnsupportedVersion`.
 2. `Telemetry { seq, records }` chunks, with `seq = 0, 1, 2, ...` and no gaps. Each is
    acknowledged with `Ack`.
 3. `Finish { seq = next }`: the server replies with the final `Verdict`.
@@ -119,7 +124,7 @@ Either way, the final evidence and verdict are stored.
 
 | Table | Holds |
 |-------|-------|
-| `sessions` | Id, `match_id`, `player_id`, amplitude, client name, status, created/ended time, record count |
+| `sessions` | Id, `match_id`, `player_id`, amplitude, client name, ground-truth `label` (test environment only; NULL otherwise), status, created/ended time, record count |
 | `evidence` | Per completed 30 s window and for the whole session: both statistics (pairs, r, slope, slope se, residual sd, κ, z, score, confidence, flagged). Windows are written as they complete |
 | `verdicts` | The final verdict per session: score, confidence, flagged, counts, flagged windows |
 
@@ -133,4 +138,5 @@ step response). The verdict is flagged if either is.
 | `tests/end_to_end.rs` | Acceptance criteria 1 and 5. Simulated clients (`rearguard-sim` flick, smoothing and human players, playing under server-issued seeds) through the server to verdicts, via `Finish`, the `Verdict` API and the database. Checks that seeds re-derive from the master secret |
 | `tests/robustness.rs` | Criterion 4, and criterion 2 at the socket: oversized, empty, malformed and wrong-version frames; random byte streams; replays and skips; invalid telemetry; rate limits; the session cap; disconnect and resume; abandonment after the resume timeout; half-open connections past the idle timeout; graceful shutdown; non-loopback refusal |
 | `tests/secrets.rs` | Criterion 3, as above |
+| `tests/labels.rs` | Task 1.8: ground-truth labels are never read by the detector. A labelled session's verdict equals, bit for bit, what a label-free offline detector computes from the same telemetry; lying labels change nothing; `labels` lists them |
 | `rearguard-core` `protocol` tests | Criterion 2: property tests. Arbitrary bytes never panic, every message round-trips, corrupted and truncated payloads are handled, and length prefixes are checked before allocation |

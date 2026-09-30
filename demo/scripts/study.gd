@@ -141,9 +141,10 @@ func _key_path() -> String:
 func _smoke_decline() -> void:
 	print("study: smoke: consent sha256 %s" % _text.text.sha256_text())
 	print("study: smoke: release %s, debug build %s" % [release, OS.is_debug_build()])
-	print("study: smoke: packed: key %s, dev overlay %s, tests %s, tools %s" % [
+	print("study: smoke: packed: key %s, dev overlay %s, tests %s, tools %s, test cheats %s" % [
 			FileAccess.file_exists(PACKED_KEY_PATH), ResourceLoader.exists("res://scripts/dev_overlay.gd"),
-			DirAccess.dir_exists_absolute("res://tests"), DirAccess.dir_exists_absolute("res://tools")])
+			DirAccess.dir_exists_absolute("res://tests"), DirAccess.dir_exists_absolute("res://tools"),
+			ResourceLoader.exists("res://scripts/test_cheats/cheats.gd")])
 	_press("I do not agree")
 	_press("Quit")
 

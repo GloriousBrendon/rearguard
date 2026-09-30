@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Client–server wire protocol, version 1.
+//! Client–server wire protocol, version 2.
 //!
 //! A connection carries frames in both directions. A frame is
 //! `length: u32 little-endian` followed by `length` payload bytes. The payload is one
@@ -26,8 +26,9 @@ use crate::probe::EpochSeed;
 use crate::secret::SECRET_KEY_LEN;
 use crate::telemetry::{self, Record};
 
-/// First payload byte of every frame.
-pub const PROTOCOL_VERSION: u8 = 1;
+/// First payload byte of every frame. Version 2 added [`ClientMessage::Hello`]'s
+/// `label`.
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// Bytes in a frame's length prefix.
 pub const LENGTH_PREFIX: usize = 4;
@@ -207,6 +208,11 @@ pub enum ClientMessage {
     Hello {
         /// Client software name and version.
         client: String,
+        /// Ground-truth label for evaluation sessions in Rearguard's own test
+        /// environment (for example `"cheat:flick-aimbot"`), else `None`. The server
+        /// stores it with the session for the evaluation harness and never gives it to
+        /// the detector. Like everything a client sends, it is untrusted.
+        label: Option<String>,
     },
     /// Re-attach a session whose connection dropped.
     Resume {
@@ -474,6 +480,11 @@ mod tests {
         let messages = [
             ClientMessage::Hello {
                 client: "sim/0.0.0".into(),
+                label: None,
+            },
+            ClientMessage::Hello {
+                client: "rearguard-aimrange/test".into(),
+                label: Some("cheat:flick-aimbot".into()),
             },
             ClientMessage::Resume {
                 session_id: 7,
@@ -558,7 +569,7 @@ mod tests {
         })
         .unwrap();
         let mut p = payload(&frame).to_vec();
-        p[0] = 2;
+        p[0] = PROTOCOL_VERSION - 1;
         assert_eq!(
             decode_payload::<ClientMessage>(&p),
             Err(ProtocolError::UnsupportedVersion)
@@ -617,7 +628,8 @@ mod tests {
 
     fn any_client_message() -> impl Strategy<Value = ClientMessage> {
         prop_oneof![
-            ".{0,40}".prop_map(|client| ClientMessage::Hello { client }),
+            (".{0,40}", proptest::option::of(".{0,40}"))
+                .prop_map(|(client, label)| ClientMessage::Hello { client, label }),
             (any::<u64>(), any::<[u8; 16]>()).prop_map(|(session_id, t)| ClientMessage::Resume {
                 session_id,
                 token: SessionToken(t)

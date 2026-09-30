@@ -357,7 +357,7 @@ async fn handle(
     held: &mut Option<u64>,
 ) -> ServerMessage {
     match message {
-        ClientMessage::Hello { client } => hello(shared, client, conn, held).await,
+        ClientMessage::Hello { client, label } => hello(shared, client, label, conn, held).await,
         ClientMessage::Resume { session_id, token } => {
             if held.is_some() {
                 return error(ErrorCode::NotAllowed);
@@ -488,6 +488,7 @@ async fn handle(
 async fn hello(
     shared: &Arc<Shared>,
     client: String,
+    label: Option<String>,
     conn: u64,
     held: &mut Option<u64>,
 ) -> ServerMessage {
@@ -527,12 +528,16 @@ async fn hello(
         return error(ErrorCode::Internal);
     };
     let client: String = client.chars().take(64).collect();
+    // The ground-truth label goes to the store for the evaluation harness, and nowhere
+    // else: the detector above was built without it.
+    let label: Option<String> = label.map(|l| l.chars().take(64).collect());
     let row = NewSession {
         session_id,
         match_id: match_id.clone(),
         player_id: PLAYER_ID,
         amplitude_ppm: amplitude.ppm(),
         client: client.clone(),
+        label,
         created_ms: now_ms(),
     };
     let store = Arc::clone(&shared.store);

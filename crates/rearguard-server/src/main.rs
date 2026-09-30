@@ -18,6 +18,9 @@ Usage:
   rearguard-server run --config FILE            Serve until Ctrl-C
   rearguard-server verdict --db FILE --session ID
                                                 Print a stored session verdict as JSON
+  rearguard-server labels --db FILE             For the evaluation harness: one JSON line
+                                                per session with a ground-truth label
+                                                (test environment only), with its verdict
 
 Relative paths in the config file are resolved from the config file's directory.
 The master secret and session seeds are never printed or logged.";
@@ -44,6 +47,7 @@ fn main() -> ExitCode {
         },
         ["run", "--config", path] => run(Path::new(path)),
         ["verdict", "--db", db, "--session", id] => verdict(Path::new(db), id),
+        ["labels", "--db", db] => labels(Path::new(db)),
         ["-h" | "--help"] => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -128,4 +132,31 @@ fn verdict(db: &Path, id: &str) -> ExitCode {
         Ok(None) => fail(format_args!("no stored verdict for session {session_id}")),
         Err(e) => fail(e),
     }
+}
+
+/// Joins ground-truth labels to verdicts, for the evaluation harness. This is the only
+/// reader of the labels; the detector never sees them.
+fn labels(db: &Path) -> ExitCode {
+    let store = match Store::open(db) {
+        Ok(s) => s,
+        Err(e) => return fail(format_args!("{}: {e}", db.display())),
+    };
+    let sessions = match store.labelled_sessions() {
+        Ok(s) => s,
+        Err(e) => return fail(e),
+    };
+    for (session_id, label, status) in sessions {
+        let verdict = match store.verdict(session_id) {
+            Ok(v) => v,
+            Err(e) => return fail(e),
+        };
+        let line = serde_json::json!({
+            "session_id": session_id,
+            "label": label,
+            "status": status.name(),
+            "verdict": verdict,
+        });
+        println!("{line}");
+    }
+    ExitCode::SUCCESS
 }

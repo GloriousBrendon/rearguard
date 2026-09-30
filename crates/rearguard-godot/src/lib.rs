@@ -524,6 +524,25 @@ pub struct RearguardClient {
 }
 
 impl RearguardClient {
+    fn connect(&mut self, address: GString, client_name: GString, label: Option<String>) -> Error {
+        let Ok(addr) = address.to_string().parse::<SocketAddr>() else {
+            return Error::ERR_INVALID_PARAMETER;
+        };
+        let config = UplinkConfig {
+            label,
+            ..UplinkConfig::local(addr, &client_name.to_string())
+        };
+        match Uplink::connect(config) {
+            Ok((uplink, info, seed)) => {
+                self.uplink = Some(uplink);
+                self.info = Some(info);
+                self.seed = Some(seed);
+                Error::OK
+            }
+            Err(_) => Error::ERR_CANT_CONNECT,
+        }
+    }
+
     fn send(&self, record: Option<Record>) -> bool {
         match (record, self.uplink.as_ref()) {
             (Some(r), Some(u)) => {
@@ -541,18 +560,20 @@ impl RearguardClient {
     /// streaming. Blocks for at most a few seconds.
     #[func]
     fn connect_to(&mut self, address: GString, client_name: GString) -> Error {
-        let Ok(addr) = address.to_string().parse::<SocketAddr>() else {
-            return Error::ERR_INVALID_PARAMETER;
-        };
-        match Uplink::connect(UplinkConfig::local(addr, &client_name.to_string())) {
-            Ok((uplink, info, seed)) => {
-                self.uplink = Some(uplink);
-                self.info = Some(info);
-                self.seed = Some(seed);
-                Error::OK
-            }
-            Err(_) => Error::ERR_CANT_CONNECT,
-        }
+        self.connect(address, client_name, None)
+    }
+
+    /// Like `connect_to`, with a ground-truth `label` for the session (task 1.8's test
+    /// bots, in Rearguard's own test environment only). The server stores it for the
+    /// evaluation harness; the detector never reads it.
+    #[func]
+    fn connect_labelled(
+        &mut self,
+        address: GString,
+        client_name: GString,
+        label: GString,
+    ) -> Error {
+        self.connect(address, client_name, Some(label.to_string()))
     }
 
     /// `"not connected"`, `"connected"`, `"reconnecting"`, `"finishing"`, `"finished"`

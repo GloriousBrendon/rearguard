@@ -5,6 +5,10 @@
 //! No seed, secret or resume token is ever written here: a session's seed can always
 //! be re-derived from the master secret and its `(match_id, player_id)`.
 //!
+//! A session's ground-truth `label` (test environment only, see
+//! [`rearguard_core::protocol::ClientMessage::Hello`]) is stored for the evaluation
+//! harness. The detector never reads it: it lives only in the `sessions` table.
+//!
 //! Identifiers are `u64` in Rust and SQLite `INTEGER` (i64); the server only issues
 //! values below 2^63, so they are stored unchanged.
 
@@ -22,6 +26,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     player_id      INTEGER NOT NULL,
     amplitude_ppm  INTEGER NOT NULL,
     client         TEXT    NOT NULL,
+    label          TEXT,
     status         TEXT    NOT NULL,
     created_ms     INTEGER NOT NULL,
     ended_ms       INTEGER,
@@ -65,6 +70,8 @@ pub struct NewSession {
     pub amplitude_ppm: u32,
     /// Client software name, as it reported itself.
     pub client: String,
+    /// Ground-truth label for the evaluation harness, as the client reported it.
+    pub label: Option<String>,
     /// Creation time, Unix milliseconds.
     pub created_ms: u64,
 }
@@ -104,6 +111,13 @@ impl Store {
     fn init(conn: Connection) -> rusqlite::Result<Self> {
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         conn.execute_batch(SCHEMA)?;
+        // Databases created before task 1.8 have no `label` column.
+        let has_label = conn
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'label'")?
+            .exists([])?;
+        if !has_label {
+            conn.execute_batch("ALTER TABLE sessions ADD COLUMN label TEXT;")?;
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -127,14 +141,16 @@ impl Store {
     pub fn create_session(&self, s: &NewSession) -> rusqlite::Result<()> {
         self.with(|c| {
             c.execute(
-                "INSERT INTO sessions (session_id, match_id, player_id, amplitude_ppm, client, status, created_ms)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO sessions (session_id, match_id, player_id, amplitude_ppm, client, label, status,
+                     created_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     to_i64(s.session_id),
                     s.match_id,
                     to_i64(s.player_id),
                     s.amplitude_ppm,
                     s.client,
+                    s.label,
                     SessionStatus::Open.name(),
                     to_i64(s.created_ms)
                 ],
@@ -295,6 +311,37 @@ impl Store {
         })
     }
 
+    /// Every stored session that has a ground-truth label, oldest first:
+    /// `(session_id, label, status)`. For the evaluation harness only.
+    ///
+    /// # Errors
+    /// SQLite errors.
+    pub fn labelled_sessions(&self) -> rusqlite::Result<Vec<(u64, String, SessionStatus)>> {
+        self.with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT session_id, label, status FROM sessions WHERE label IS NOT NULL
+                 ORDER BY created_ms, session_id",
+            )?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    to_u64(r.get(0)?),
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })?;
+            rows.map(|row| {
+                row.map(|(id, label, s)| {
+                    (
+                        id,
+                        label,
+                        SessionStatus::from_name(&s).unwrap_or(SessionStatus::Abandoned),
+                    )
+                })
+            })
+            .collect()
+        })
+    }
+
     /// Number of stored window evidence rows for a session (two per window).
     ///
     /// # Errors
@@ -388,6 +435,7 @@ mod tests {
                 player_id: 1,
                 amplitude_ppm: 5000,
                 client: "test".into(),
+                label: None,
                 created_ms: 1,
             })
             .unwrap();
@@ -432,6 +480,54 @@ mod tests {
         assert_eq!(
             store.sessions().unwrap(),
             vec![((1 << 62) + 5, SessionStatus::Finished)]
+        );
+    }
+
+    #[test]
+    fn labels_are_stored_and_listed() {
+        let store = Store::open_in_memory().unwrap();
+        for (id, label) in [
+            (1, None),
+            (2, Some("cheat:flick-aimbot")),
+            (3, Some("bot:scripted")),
+        ] {
+            store
+                .create_session(&NewSession {
+                    session_id: id,
+                    match_id: format!("m-{id}"),
+                    player_id: 1,
+                    amplitude_ppm: 5000,
+                    client: "test".into(),
+                    label: label.map(Into::into),
+                    created_ms: id,
+                })
+                .unwrap();
+        }
+        assert_eq!(
+            store.labelled_sessions().unwrap(),
+            vec![
+                (2, "cheat:flick-aimbot".into(), SessionStatus::Open),
+                (3, "bot:scripted".into(), SessionStatus::Open),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_database_from_before_labels_gains_the_column() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(&SCHEMA.replace("    label          TEXT,\n", ""))
+            .unwrap();
+        conn.execute(
+            "INSERT INTO sessions (session_id, match_id, player_id, amplitude_ppm, client, status, created_ms)
+             VALUES (9, 'm-9', 1, 5000, 'old', 'finished', 1)",
+            [],
+        )
+        .unwrap();
+        let store = Store::init(conn).unwrap();
+        assert!(store.labelled_sessions().unwrap().is_empty());
+        assert_eq!(
+            store.sessions().unwrap(),
+            vec![(9, SessionStatus::Finished)]
         );
     }
 }

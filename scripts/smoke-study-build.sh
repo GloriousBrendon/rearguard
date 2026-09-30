@@ -103,8 +103,8 @@ grep -q "study: smoke: consent sha256 $consent_hash" "$work/decline.log" \
   || bad "consent text on screen differs from demo/study/consent_v1.txt (expected sha256 $consent_hash)"
 grep -q "study: smoke: release $release, debug build false" "$work/decline.log" \
   && ok "release build, label $release" || bad "release label or build type"
-grep -q "study: smoke: packed: key true, dev overlay false, tests false, tools false" "$work/decline.log" \
-  && ok "packs the study key; no developer overlay, tests or tools" || bad "build contents"
+grep -q "study: smoke: packed: key true, dev overlay false, tests false, tools false, test cheats false" "$work/decline.log" \
+  && ok "packs the study key; no developer overlay, tests, tools or test cheats" || bad "build contents"
 
 written="$(find "$work/decline" -type f | sed "s|^$work/decline/||")"
 if [ -z "$written" ]; then ok "no file written in the user folders or working directory"

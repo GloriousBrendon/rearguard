@@ -50,8 +50,11 @@ The repository is private, on a personal GitHub account. Licensed MIT OR Apache-
   `Display`, and never sent to a client beyond what the protocol requires. Wrap
   them in a type that redacts and zeroizes (a later task adds this type; until
   then, do not introduce raw seed handling).
-- Test cheats run only inside Rearguard's own test environment (`rearguard-sim`).
-  Nothing aimed at live servers or other people's games.
+- Test cheats run only inside Rearguard's own test environment (`rearguard-sim`, and
+  the aim range's in-process test bots in `demo/scripts/test_cheats/`, which refuse to
+  run without `REARGUARD_TEST_ENV=1` and a loopback or allowlisted server). Nothing
+  aimed at live servers or other people's games. Ground-truth labels are session
+  metadata for the evaluation harness only; the detector never reads them.
 - Add dependencies sparingly. **Every dependency addition (normal, dev or build)
   must pass `cargo deny --locked check` and be listed in the dependency table
   below with its licence.** Never weaken `deny.toml` to make a crate pass; a

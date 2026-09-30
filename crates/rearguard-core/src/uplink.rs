@@ -51,6 +51,9 @@ pub struct UplinkConfig {
     pub addr: SocketAddr,
     /// Client software name, sent in `Hello`.
     pub client_name: String,
+    /// Ground-truth label, sent in `Hello`, for evaluation sessions in Rearguard's own
+    /// test environment only (see [`ClientMessage::Hello`]). `None` for real play.
+    pub label: Option<String>,
     /// Limit on connecting and on the handshake.
     pub connect_timeout: Duration,
     /// Records per telemetry chunk.
@@ -74,6 +77,7 @@ impl UplinkConfig {
         Self {
             addr,
             client_name: client_name.to_owned(),
+            label: None,
             connect_timeout: Duration::from_secs(2),
             chunk_records: 256,
             flush_interval: Duration::from_millis(250),
@@ -223,6 +227,7 @@ impl Uplink {
             &mut stream,
             &ClientMessage::Hello {
                 client: config.client_name.clone(),
+                label: config.label.clone(),
             },
         )
         .map_err(UplinkError::Io)?;

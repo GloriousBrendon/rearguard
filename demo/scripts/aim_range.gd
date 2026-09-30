@@ -10,6 +10,11 @@
 ## Command-line options come after `--`, for example:
 ##   godot --path demo -- --scenario spray --seed 7 --server 127.0.0.1:7461
 ##   godot --headless --path demo --fixed-fps 120 -- --bot --scenario flick --seed 7 --duration 10
+##
+## `--cheat NAME` runs one of the test cheats (task 1.8, scripts/test_cheats/) instead of
+## the scripted bot. It refuses to run outside Rearguard's own test environment
+## (REARGUARD_TEST_ENV=1 and a loopback or allowlisted --server) and exits with
+## status 3.
 extends Node3D
 
 const RangeSession := preload("res://scripts/range_session.gd")
@@ -18,6 +23,12 @@ const AimModel := preload("res://scripts/aim_model.gd")
 const ScriptedBot := preload("res://scripts/scripted_bot.gd")
 const ProbeHooks := preload("res://scripts/probe_hooks.gd")
 const TelemetryOut := preload("res://scripts/telemetry_out.gd")
+
+## Where the test cheats live. Loaded only when --cheat asks for one (study builds leave
+## the folder out).
+const TEST_CHEATS_PATH := "res://scripts/test_cheats/cheats.gd"
+## Exit status when a test cheat refuses to run.
+const EXIT_REFUSED := 3
 
 ## Marks events the scripted bot injects, so bot and hardware input never mix.
 const BOT_DEVICE_ID := 0x7E57
@@ -28,7 +39,13 @@ signal run_finished(recording_path: String)
 ## Run options. Set before the node enters the tree to skip command-line parsing.
 var config: Dictionary = {}
 var session: RangeSession
-var bot: ScriptedBot
+## The scripted bot or a test cheat: anything with plan(session) -> {moves, trigger}.
+var bot: RefCounted
+## Why a requested test cheat refused to run, else "".
+var refusal := ""
+## The session's ground-truth label ("cheat:<name>" or "bot:scripted"), sent with the
+## server session for the evaluation harness only; "" for a human.
+var label := ""
 var recording_path := ""
 ## The Rust extension's RearguardProbe while the input probe runs, else null.
 var probe: RefCounted = null
@@ -61,6 +78,8 @@ static func default_config() -> Dictionary:
 		"sens": AimModel.DEFAULT_DEG_PER_COUNT,
 		"bot": false,
 		"bot_seed": 1,
+		# A test cheat (task 1.8) instead of the scripted bot; see scripts/test_cheats/.
+		"cheat": "",
 		"out": "",
 		"quit": false,
 		"probe": true,
@@ -85,7 +104,7 @@ static func default_config() -> Dictionary:
 
 
 ## Parses `--scenario NAME --seed N --duration S --sens DEG --bot --bot-seed N
-## --out PATH --quit --no-probe --probe-seed-file PATH --probe-amplitude-ppm N
+## --cheat NAME --out PATH --quit --no-probe --probe-seed-file PATH --probe-amplitude-ppm N
 ## --server HOST:PORT --no-record --frame-stats PATH`. Unknown options are reported and
 ## ignored.
 static func parse_args(args: PackedStringArray) -> Dictionary:
@@ -100,6 +119,7 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 			"--duration": c.duration = value.to_float(); i += 1
 			"--sens": c.sens = value.to_float(); i += 1
 			"--bot-seed": c.bot_seed = value.to_int(); i += 1
+			"--cheat": c.cheat = value; c.bot = true; c.quit = true; i += 1
 			"--out": c.out = value; i += 1
 			"--probe-seed-file": c.probe_seed_file = value; i += 1
 			"--probe-amplitude-ppm": c.probe_amplitude_ppm = value.to_int(); i += 1
@@ -120,6 +140,8 @@ func _ready() -> void:
 	Input.use_accumulated_input = false
 	if config.is_empty():
 		config = parse_args(OS.get_cmdline_user_args())
+	if not str(config.cheat).is_empty() and not _allow_cheat():
+		return
 	var kind := Scenario.kind_from_name(config.scenario)
 	if kind < 0:
 		push_error("aim_range: unknown scenario '%s' (tracking, flick, spray)" % config.scenario)
@@ -142,9 +164,31 @@ func _ready() -> void:
 		var overlay: Node = load("res://scripts/dev_overlay.gd").new()
 		add_child(overlay)
 		overlay.watch(self)
-	if config.bot:
-		bot = ScriptedBot.new(config.bot_seed)
+	if not str(config.cheat).is_empty():
+		var cheats: GDScript = load(TEST_CHEATS_PATH)
+		bot = cheats.create(str(config.cheat), config.bot_seed)
+		label = cheats.label_for(str(config.cheat))
 		_start()
+	elif config.bot:
+		bot = ScriptedBot.new(config.bot_seed)
+		label = "bot:scripted"
+		_start()
+
+
+## The test-cheat guard (scripts/test_cheats/test_env.gd). On refusal: an error, no
+## session, and with `quit` exit status EXIT_REFUSED.
+func _allow_cheat() -> bool:
+	var cheats: GDScript = load(TEST_CHEATS_PATH) if ResourceLoader.exists(TEST_CHEATS_PATH) else null
+	if cheats == null:
+		refusal = "test cheats are not part of this build"
+	else:
+		refusal = cheats.refusal(config, cheats.TestEnv.process_environment())
+	if refusal.is_empty():
+		return true
+	push_error("aim_range: test cheat '%s' refused: %s" % [config.cheat, refusal])
+	if config.quit:
+		get_tree().quit(EXIT_REFUSED)
+	return false
 
 
 func _start() -> void:
@@ -176,7 +220,9 @@ func _start() -> void:
 func _connect_server(fields: Dictionary, ts: int) -> void:
 	var c: RefCounted = ClassDB.instantiate("RearguardClient")
 	var name := "rearguard-aimrange/godot-%s" % Engine.get_version_info().string
-	var err: int = c.connect_to(str(config.server), name)
+	# The label is session metadata for the evaluation harness; the detector never reads it.
+	var err: int = c.connect_labelled(str(config.server), name, label) if not label.is_empty() \
+			else c.connect_to(str(config.server), name)
 	if err != OK:
 		push_warning("aim_range: server %s unreachable (%s); running offline with a local seed,"
 				% [config.server, error_string(err)] + " so no verdict will come")
@@ -243,6 +289,8 @@ func _write_environment() -> void:
 	var env := {
 		"source": "bot" if bot != null else "human",
 		"bot_seed": config.bot_seed if bot != null else null,
+		"cheat": str(config.cheat) if not str(config.cheat).is_empty() else null,
+		"ground_truth": label if not label.is_empty() else null,
 		"godot_version": Engine.get_version_info().string,
 		"os": OS.get_name(),
 		"display_driver": DisplayServer.get_name(),
@@ -324,7 +372,7 @@ func _physics_process(_delta: float) -> void:
 	if not _active():
 		return
 	if bot != null:
-		var p := bot.plan(session)
+		var p: Dictionary = bot.plan(session)
 		for counts: Vector2 in p.moves:
 			var mm := InputEventMouseMotion.new()
 			mm.device = BOT_DEVICE_ID
@@ -451,7 +499,7 @@ func _status_line() -> String:
 	if session.finished:
 		return "Finished. %s" % verdict_line if not verdict_line.is_empty() else "Finished; waiting for the verdict"
 	if bot != null:
-		return "Scripted bot"
+		return "Test cheat: %s" % config.cheat if not str(config.cheat).is_empty() else "Scripted bot"
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return "Click to start (Esc releases the mouse and pauses)"
 	return ""

@@ -88,10 +88,10 @@ umask 077
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
-# 1. Staging copy without the import cache, the overlay, tests and tools.
+# 1. Staging copy without the import cache, the overlay, tests, tools and test cheats.
 cp -R "$repo/demo" "$stage/demo"
 proj="$stage/demo"
-rm -rf "$proj/.godot" "$proj/tests" "$proj/tools" "$proj/README.md"
+rm -rf "$proj/.godot" "$proj/tests" "$proj/tools" "$proj/README.md" "$proj/scripts/test_cheats"
 rm -f "$proj"/scripts/*_test.gd "$proj"/scripts/*_test.gd.uid "$proj"/scripts/dev_overlay.gd "$proj"/scripts/dev_overlay.gd.uid
 
 # 2. Study build settings.

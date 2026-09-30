@@ -115,9 +115,15 @@ pub struct Opened {
 }
 
 pub async fn hello(client: &mut Client) -> Opened {
+    hello_labelled(client, None).await
+}
+
+/// Opens a session with a ground-truth `label` in `Hello`.
+pub async fn hello_labelled(client: &mut Client, label: Option<&str>) -> Opened {
     match client
         .request(&ClientMessage::Hello {
             client: "test-client/0".into(),
+            label: label.map(Into::into),
         })
         .await
         .unwrap()

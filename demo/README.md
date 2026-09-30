@@ -124,6 +124,7 @@ Options (after `--`):
 | `--sens DEG` | `0.022` | Degrees of view per raw count |
 | `--bot` | off | Scripted bot plays instead of the mouse; implies `--quit` |
 | `--bot-seed N` | `1` | Seed for the bot's noise |
+| `--cheat NAME` | none | A test cheat plays instead of the mouse (`recoil-macro`, `flick-aimbot`, `humanised-aimbot`, `adaptive-aimbot`); implies `--quit`. **Test environment only:** needs `REARGUARD_TEST_ENV=1` and a loopback or allowlisted `--server`, else exits with status 3. See "Test cheats" |
 | `--out PATH` | `user://recordings/<scenario>-seed<N>-<time>.jsonl` | Recording file |
 | `--quit` / `--no-quit` | off | Quit when the scenario ends |
 | `--no-probe` | probe on | Run without the input-probe drift (identity hooks) |
@@ -222,7 +223,8 @@ Every record has `type`, `ts_us`, `frame` and `tick`:
 
 The runtime details the schema does not carry are written next to the recording as
 `<recording>.env.json`:
-- `source` (`human` or `bot`), `bot_seed`, `godot_version`, `os`, `display_driver`,
+- `source` (`human` or `bot`), `bot_seed`, `cheat` and `ground_truth` (a test cheat's name
+  and label, see "Test cheats"), `godot_version`, `os`, `display_driver`,
   `accumulated_input`, `delta_source`, `clock`, `debug_build`;
 - the probe: `probe_enabled`, `probe_amplitude_ppm`, `probe_start_us`, and
   `probe_seed`: where the seed came from (`"server"`, `"file"`, `"random"` or
@@ -304,6 +306,26 @@ With `--server HOST:PORT`, the aim range streams its telemetry to a Rearguard se
 bandwidth per minute of play are in `docs/results/live-loop-1.7.md`, measured with
 `scripts/measure-live-loop.sh`.
 
+## Test cheats
+
+`scripts/test_cheats/` holds the test cheats of task 1.8: a recoil macro, a
+computed-flick aimbot, a humanised aimbot and an adaptive aimbot. They mirror the
+simulator's cheat models. Details are in
+[scripts/test_cheats/README.md](scripts/test_cheats/README.md).
+
+**They run only inside Rearguard's own test environment.** They inject input only into
+this range, in process, through its own input path. Each one refuses to start unless
+`REARGUARD_TEST_ENV=1` is set and `--server` is a loopback address or on
+`REARGUARD_TEST_SERVER_ALLOWLIST`. Nothing in them hooks, reads or targets another
+process or game, and study builds leave them out.
+
+Each run's ground-truth label goes into the server session's metadata, for the
+evaluation harness only (`rearguard-server labels`). It is never in the telemetry, and
+the detector never reads it.
+
+Equivalence with physical KMBox or Cronus hardware injectors is unverified; it would
+need a physical device to confirm.
+
 ## Human study
 
 `scenes/study.tscn` (`scripts/study.gd`) is the build for human studies (task 1.9).
@@ -379,7 +401,7 @@ folder in a temporary directory, deleted afterwards, which:
   them). The study uses the packed key by default, and the extension reads it from the
   pack itself, so it never passes through GDScript;
 - leaves out the developer overlay (`scripts/dev_overlay.gd`), the tests (`*_test.gd`,
-  `tests/`) and `tools/`;
+  `tests/`), `tools/` and the test cheats (`scripts/test_cheats/`);
 - makes `scenes/study.tscn` the main scene;
 - turns off Godot's log file and shader cache, so a build that is declined writes
   nothing at all.
@@ -402,10 +424,10 @@ checks above are therefore study options, not scripts.
 `scripts/smoke-study-build.sh` tests an exported build headless, on Linux or Windows
 (Git Bash), with fresh, empty user folders:
 1. `--smoke-decline`: the build starts and exits 0. The consent text on screen matches
-   `study/consent_v1.txt` byte for byte, the key is packed, and the overlay, tests and
-   tools are not. No file is written in the user folders, the working directory or the
-   build folder. The build holds `LICENSE-MIT` and `LICENSE-APACHE`, identical to the
-   repository's.
+   `study/consent_v1.txt` byte for byte, the key is packed, and the overlay, tests,
+   tools and test cheats are not. No file is written in the user folders, the working
+   directory or the build folder. The build holds `LICENSE-MIT` and `LICENSE-APACHE`,
+   identical to the repository's.
 2. `--self-test` on a short protocol, then `tools/check_study_export.gd` (run with the
    editor) checks the export with the task 1.9 rules. It also replays every session
    with the drift re-derived from the facilitator's copy of the key, which proves that
@@ -534,10 +556,11 @@ With accelerated input, the fast pass sums higher and fractional deltas appear.
 | `scenes/study.tscn`, `scripts/study.gd` | Human-study build: consent, baseline, blind A/B comparisons, export |
 | `study/` | Study protocol (`protocol.json`) and consent text (`consent_v1.txt`) |
 | `scripts/scripted_bot.gd` | Scripted synthetic player for headless runs |
+| `scripts/test_cheats/` | Test cheats (task 1.8), test environment only; see its README |
 | `scripts/probe_hooks.gd` | Installs the extension's drift multipliers on the two aim hooks |
 | `rearguard.gdextension` | Loads the Rust extension (`crates/rearguard-godot`) from `../target/` |
 | `scripts/*_test.gd` | Tests, one file beside each script; `probe_binding_test.gd` checks the extension, `live_loop_test.gd` runs against a real server (`target/debug/rearguard-server`) |
-| `tests/` | Test runner and base class; `probe_golden.json` holds the core golden vectors the extension must reproduce; `study_export_check.gd` holds the study export checks |
+| `tests/` | Test runner and base class; `live_server.gd` starts a real server for the live tests; `probe_golden.json` holds the core golden vectors the extension must reproduce; `study_export_check.gd` holds the study export checks |
 | `tools/summarize_recording.gd` | Input statistics for recordings |
 | `tools/check_study_export.gd` | Checks an export from a study build (smoke test, or a participant's zip with `--human`) |
 | `tools/godot_notices.gd` | Writes the engine's licence notices for study builds |
