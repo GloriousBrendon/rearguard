@@ -716,6 +716,7 @@ dependencies = [
  "getrandom",
  "godot",
  "rearguard-core",
+ "serde_json",
  "zeroize",
 ]
 

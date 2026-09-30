@@ -129,6 +129,20 @@ pub(crate) fn load_or_create_seed(
     }
 }
 
+/// Loads a root key (for example a study key) from a file of 64 hex digits. The file's
+/// text is wiped from memory after parsing.
+pub(crate) fn load_root(path: &str) -> Result<rearguard_core::probe::RootSeed, SeedError> {
+    match fs::read_to_string(path) {
+        Ok(mut text) => {
+            let root = rearguard_core::probe::RootSeed::from_hex(&text);
+            text.zeroize();
+            root.ok_or(SeedError::Invalid)
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Err(SeedError::NotFound),
+        Err(_) => Err(SeedError::Io),
+    }
+}
+
 /// A non-negative GDScript integer as `u64`.
 pub(crate) fn to_u64(v: i64) -> Option<u64> {
     u64::try_from(v).ok()
@@ -369,6 +383,29 @@ mod tests {
         fs::write(&path, "not hex").unwrap();
         assert_eq!(
             load_or_create_seed(&source, true).err(),
+            Some(SeedError::Invalid)
+        );
+    }
+
+    #[test]
+    fn root_keys_load_from_hex_files_only() {
+        let path = temp_path("study.hex");
+        assert_eq!(
+            load_root(&path.to_string_lossy()).err(),
+            Some(SeedError::NotFound)
+        );
+        fs::write(&path, format!("{HEX}\n")).unwrap();
+        let root = load_root(&path.to_string_lossy()).unwrap();
+        let a = root.match_key(b"m").player_key(0).epoch_seed(0);
+        let b = rearguard_core::probe::RootSeed::from_hex(HEX)
+            .unwrap()
+            .match_key(b"m")
+            .player_key(0)
+            .epoch_seed(0);
+        assert_eq!(a.expose_secret(), b.expose_secret());
+        fs::write(&path, "nope").unwrap();
+        assert_eq!(
+            load_root(&path.to_string_lossy()).err(),
             Some(SeedError::Invalid)
         );
     }

@@ -54,6 +54,10 @@ godot --path demo -- --scenario flick --server 127.0.0.1:7461
 # if the library is not built, unless REARGUARD_REQUIRE_EXTENSION=1 (as in CI).
 REARGUARD_REQUIRE_EXTENSION=1 godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
 
+# Human study (task 1.9): consent, baseline rounds, blind A/B comparisons, one export
+# file. See "Human study" and docs/study/facilitator-instructions.md.
+godot --path demo res://scenes/study.tscn
+
 # Input statistics for one or more recordings.
 godot --headless --path demo --script res://tools/summarize_recording.gd -- /tmp/spray.jsonl
 ```
@@ -292,6 +296,55 @@ With `--server HOST:PORT`, the aim range streams its telemetry to a Rearguard se
 bandwidth per minute of play are in `docs/results/live-loop-1.7.md`, measured with
 `scripts/measure-live-loop.sh`.
 
+## Human study
+
+`scenes/study.tscn` (`scripts/study.gd`) is the build for human studies (task 1.9).
+The facilitator's steps are in `docs/study/facilitator-instructions.md`.
+
+**Flow:**
+
+1. **Consent** (`study/consent_v1.txt`). Nothing is recorded before the participant
+   agrees; declining quits with nothing written.
+2. **Participant ID and plan.** A random pseudonymous ID (`P-` plus 10 characters) is
+   drawn from the OS's CSPRNG, along with a random 62-bit randomisation seed. The ID
+   is not linked to anyone and no mapping is stored.
+   `rearguard_core::study::plan` (via `RearguardStudy.plan`) turns the protocol
+   (`study/protocol.json`) and the seed into the plan. The plan is deterministic, so
+   the analysis can reproduce it from the seed in the export.
+3. **Baseline rounds:** one aim-range run per planned session, drift on or off in
+   shuffled order.
+4. **Blind comparisons:** two intervals, A then B, with the same scenario seed. One is
+   drifted at the trial's amplitude and the other is not (amplitude 0 is a catch trial,
+   where neither is). The drifted side is balanced within each amplitude and the trial
+   order is shuffled. Each trial ends in a forced choice, A or B; the answer and
+   response time are logged.
+5. **Export:** one zip,
+   `rearguard-study-<study>-<participant>.zip`, in `user://exports` (or
+   `--export-dir`). It holds `manifest.json` (protocol, plan, seed, sessions, trials,
+   Godot and input settings) and `sessions/<label>.jsonl`, each round's telemetry.
+   The temporary session files are then deleted.
+
+**Drift seeds.** Each round's probe seed is derived inside the extension from the
+facilitator's study key (`--study-key`, default `user://study/study-key.hex`). The
+derivation is root → match → player 0 → epoch 0, with the match id
+`study:<study>:<participant>:<label>`, which is also the recording header's
+`match_id`. The export never holds the key or a seed; the analysis re-derives them
+from the key, as `scripts/study_test.gd` does.
+
+**Blindness.** During the study, the aim range runs without the developer overlay and
+without the environment sidecar file. Its HUD shows only the round's neutral title,
+the time left and hits. Nothing on screen shows a round's condition or amplitude.
+
+**Tests** (`scripts/study_test.gd`) run the whole flow with automated consent, the
+scripted bot and seeded answers. They check:
+- the labelled baseline sessions, drift on and off, each replayed with the probe
+  re-derived from the key;
+- the logged trials;
+- that the plan re-derives from the logged seed;
+- that the export holds only allowlisted keys and none of the machine's user name,
+  host name, home or user-data path, unique id, today's date or the study key;
+- that declining writes nothing.
+
 ## Raw input path
 
 This is how a mouse movement reaches `move.dx` / `move.dy`. It was checked
@@ -392,6 +445,8 @@ With accelerated input, the fast pass sums higher and fractional deltas appear.
 | `scripts/recorder.gd` | In-memory log of the session's telemetry records (tests), and a telemetry file reader |
 | `scripts/telemetry_out.gd` | Forwards records to the extension's file writer or server client |
 | `scripts/dev_overlay.gd` | Developer overlay (debug builds only) |
+| `scenes/study.tscn`, `scripts/study.gd` | Human-study build: consent, baseline, blind A/B comparisons, export |
+| `study/` | Study protocol (`protocol.json`) and consent text (`consent_v1.txt`) |
 | `scripts/scripted_bot.gd` | Scripted synthetic player for headless runs |
 | `scripts/probe_hooks.gd` | Installs the extension's drift multipliers on the two aim hooks |
 | `rearguard.gdextension` | Loads the Rust extension (`crates/rearguard-godot`) from `../target/` |

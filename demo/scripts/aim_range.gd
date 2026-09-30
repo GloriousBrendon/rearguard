@@ -68,6 +68,17 @@ static func default_config() -> Dictionary:
 		"record": true,
 		"frame_stats": "",
 		"verdict_timeout_s": 10.0,
+		# Study mode (scripts/study.gd): derive the probe's seed from a study key file,
+		# with this match id (also the header's match id).
+		"probe_study_key": "",
+		"probe_match_id": "",
+		# The developer overlay (debug builds only). A study turns it off: it would show
+		# the drift amplitude and break blinding.
+		"overlay": true,
+		# Write <recording>.env.json next to the recording.
+		"environment_file": true,
+		# A first HUD line, for example "Session 2 of 6".
+		"hud_title": "",
 	}
 
 
@@ -125,7 +136,7 @@ func _ready() -> void:
 	_build_world()
 	# The developer overlay exists only in debug builds (the editor, `godot` runs and
 	# debug exports); release exports never create it.
-	if OS.is_debug_build():
+	if OS.is_debug_build() and config.overlay:
 		var overlay: Node = load("res://scripts/dev_overlay.gd").new()
 		add_child(overlay)
 		overlay.watch(self)
@@ -138,6 +149,8 @@ func _start() -> void:
 	var ts := Time.get_ticks_usec()
 	var frame := Engine.get_process_frames()
 	var fields := {"probe_start_us": ts}
+	if not str(config.probe_match_id).is_empty():
+		fields.match_id = str(config.probe_match_id)
 	run_info = {
 		"probe_enabled": false, "probe_amplitude_ppm": 0, "probe_start_us": ts,
 		"probe_seed": "none", "server": config.server, "server_status": "not used",
@@ -187,7 +200,11 @@ func _connect_server(fields: Dictionary, ts: int) -> void:
 func _start_local_probe(ts: int) -> void:
 	var p: RefCounted = ClassDB.instantiate("RearguardProbe")
 	var err: int
-	if str(config.probe_seed_file).is_empty():
+	if not str(config.probe_study_key).is_empty():
+		err = p.start_session_derived(ProjectSettings.globalize_path(config.probe_study_key),
+				str(config.probe_match_id), 0, config.probe_amplitude_ppm, ts)
+		run_info.probe_seed = "study key"
+	elif str(config.probe_seed_file).is_empty():
 		err = p.start_session_random(config.probe_amplitude_ppm, ts)
 		run_info.probe_seed = "random"
 	else:
@@ -217,7 +234,7 @@ func _open_recording() -> void:
 ## The runtime details the telemetry header does not carry, next to the recording as
 ## <recording>.env.json. Never contains the seed or where it is kept.
 func _write_environment() -> void:
-	if not config.record:
+	if not config.record or not config.environment_file:
 		return
 	var env := {
 		"source": "bot" if bot != null else "human",
@@ -415,6 +432,12 @@ func _process(_delta: float) -> void:
 	var dir := RangeSession.direction(t)
 	_target.position = _camera.position \
 			+ Vector3(dir[0], dir[1], dir[2]) * Scenario.TARGET_DISTANCE_M
+	if not str(config.hud_title).is_empty():
+		# Study HUD: nothing that could hint at the condition.
+		_hud.text = "%s\n%.0f s left  hits %d / %d\n%s" % [
+			config.hud_title, maxf(config.duration - session.time_s(), 0.0), session.hits, session.shots,
+			_status_line() if not session.finished else ""]
+		return
 	_hud.text = "%s  seed %d  %.1f / %.0f s  hits %d / %d\n%s  motion events %d  max per frame %d\n%s" % [
 		config.scenario, config.seed, session.time_s(), config.duration, session.hits, session.shots,
 		DisplayServer.get_name(), _motion_events, _max_events_per_frame, _status_line()]

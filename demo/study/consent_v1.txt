@@ -1,0 +1,24 @@
+Rearguard aim study: information and consent
+
+What this is
+You will play a simple aiming game: clicking on targets, and holding the mouse button to spray at a target. It takes about 20 minutes. First you play six one-minute rounds. Then you play 20 pairs of short rounds, and after each pair you say which round felt different. You cannot get a question wrong; just go with your impression.
+
+What is recorded
+Only mouse and aim data from the game:
+- every mouse movement, as the raw movement values the mouse reports;
+- when each event happened, on a clock that starts when the game starts (not the date or time of day);
+- where you were aiming, when you clicked, and where the targets were;
+- your answer to each "which round felt different" question, and how long you took to answer.
+
+To make sense of the mouse data, it also records how the game read the mouse: the game engine version, the operating system name (for example "Linux" or "Windows"), the input driver name, and the mouse sensitivity setting.
+
+What is not recorded
+Nothing else. Not your name, e-mail or any contact details. No screenshots, video, audio or webcam. No keyboard input. Nothing about your computer, files or other programs. Not your IP address: the game does not connect to the internet.
+
+Your participant ID
+You get a random ID, for example P-4K7Q2M9XHT. It is not linked to your name anywhere, and nobody keeps a list linking IDs to people. If you want your data removed later, quote your ID; without it, nobody can tell which data is yours.
+
+At the end
+The game saves one file containing only the data described above. You decide whether to send it to the study facilitator. You can stop at any time by closing the window. Nothing is saved for sending until the very end.
+
+Do you agree to take part, with the data recorded as described?

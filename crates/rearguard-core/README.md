@@ -14,6 +14,10 @@ engine crate, directly or transitively. `unsafe` code is forbidden.
   bit-identical on every platform. See `docs/probe-signal-shapes.md` for the choice
   of signal shape.
 - `secret`: `SecretKey`, which is redacted in `Debug`/`Display` and zeroized on drop.
+- `study`: human-study planning (task 1.9). From a protocol and a 64-bit seed,
+  `plan` deterministically draws the shuffled baseline sessions and the blind
+  two-interval trials, with the drifted interval balanced per amplitude. The same
+  seed always gives the same plan, so the analysis can reproduce it.
 - `telemetry`: the versioned client telemetry schema (decision D2), as JSON Lines.
 - `uplink`: the client side of the protocol, for game clients. It streams one
   session's telemetry from a background thread, never blocks the caller, and resumes

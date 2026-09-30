@@ -1,0 +1,16 @@
+{
+  "protocol_version": 1,
+  "study_id": "phase1-drift",
+  "baseline": [
+    { "scenario": "flick", "amplitude_ppm": 0, "duration_s": 60.0, "repeats": 2 },
+    { "scenario": "flick", "amplitude_ppm": 5000, "duration_s": 60.0, "repeats": 2 },
+    { "scenario": "spray", "amplitude_ppm": 0, "duration_s": 60.0, "repeats": 1 },
+    { "scenario": "spray", "amplitude_ppm": 5000, "duration_s": 60.0, "repeats": 1 }
+  ],
+  "blind": {
+    "scenario": "flick",
+    "interval_duration_s": 15.0,
+    "amplitudes_ppm": [0, 2500, 5000, 10000, 20000],
+    "repeats": 4
+  }
+}

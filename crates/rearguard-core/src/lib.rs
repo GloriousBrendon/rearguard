@@ -8,6 +8,7 @@ pub mod detect;
 pub mod probe;
 pub mod protocol;
 pub mod secret;
+pub mod study;
 pub mod telemetry;
 pub mod uplink;
 

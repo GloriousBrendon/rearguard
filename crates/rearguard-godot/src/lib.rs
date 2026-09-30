@@ -32,7 +32,7 @@ use rearguard_core::telemetry::{self, Record};
 use rearguard_core::uplink::{SessionInfo, Uplink, UplinkConfig, UplinkStatus};
 
 use crate::convert::{
-    Field, SeedSource, header_from, load_or_create_seed, records, to_u32, to_u64,
+    Field, SeedSource, header_from, load_or_create_seed, load_root, records, to_u32, to_u64,
 };
 
 struct RearguardExtension;
@@ -158,6 +158,34 @@ impl RearguardProbe {
     fn start_session_random(&mut self, amplitude_ppm: i64, probe_start_us: i64) -> Error {
         match load_or_create_seed(&SeedSource::Random, true) {
             Ok(seed) => self.start(&seed, amplitude_ppm, probe_start_us),
+            Err(e) => e.to_godot(),
+        }
+    }
+
+    /// Starts a session whose seed is derived from a root key file (a study key, 64 hex
+    /// digits) through the probe key hierarchy: `match_id` → `player_id` → epoch 0. The
+    /// key and the seed stay inside Rust. Whoever holds the key file can re-derive the
+    /// seed for analysis.
+    #[func]
+    fn start_session_derived(
+        &mut self,
+        key_path: GString,
+        match_id: GString,
+        player_id: i64,
+        amplitude_ppm: i64,
+        probe_start_us: i64,
+    ) -> Error {
+        let Some(player) = to_u64(player_id) else {
+            return Error::ERR_INVALID_PARAMETER;
+        };
+        match load_root(&key_path.to_string()) {
+            Ok(root) => {
+                let seed = root
+                    .match_key(match_id.to_string().as_bytes())
+                    .player_key(player)
+                    .epoch_seed(0);
+                self.start(&seed, amplitude_ppm, probe_start_us)
+            }
             Err(e) => e.to_godot(),
         }
     }
@@ -745,5 +773,47 @@ impl RearguardClient {
         d.set("resumes", count(s.resumes));
         d.set("records_dropped", count(s.records_dropped));
         d
+    }
+}
+
+/// Human-study helpers (`rearguard_core::study`).
+#[derive(GodotClass)]
+#[class(base = RefCounted, init)]
+pub struct RearguardStudy {}
+
+#[godot_api]
+impl RearguardStudy {
+    /// A participant's plan as JSON, from the protocol JSON and a randomisation seed (a
+    /// decimal `u64` string). On error, a JSON object `{"error": "..."}`.
+    #[func]
+    fn plan(protocol_json: GString, seed: GString) -> GString {
+        let error = |m: String| serde_json::json!({ "error": m }).to_string();
+        let text = match seed.to_string().trim().parse::<u64>() {
+            Err(_) => error("the seed must be a decimal u64".into()),
+            Ok(seed) => match serde_json::from_str::<rearguard_core::study::StudyProtocol>(
+                &protocol_json.to_string(),
+            ) {
+                Err(e) => error(format!("protocol: {e}")),
+                Ok(protocol) => match rearguard_core::study::plan(&protocol, seed) {
+                    Ok(plan) => {
+                        serde_json::to_string(&plan).unwrap_or_else(|e| error(e.to_string()))
+                    }
+                    Err(e) => error(e.to_string()),
+                },
+            },
+        };
+        text.as_str().into()
+    }
+
+    /// The match identifier that seeds a study session's drift.
+    #[func]
+    fn match_id(study_id: GString, participant_id: GString, label: GString) -> GString {
+        rearguard_core::study::session_match_id(
+            &study_id.to_string(),
+            &participant_id.to_string(),
+            &label.to_string(),
+        )
+        .as_str()
+        .into()
     }
 }

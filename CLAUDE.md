@@ -124,6 +124,7 @@ checksum comes from the release's `SHA512-SUMS.txt`. The full steps are in
 | `serde_json` 1.0.151 (feature `float_roundtrip`) | core, sim | MIT OR Apache-2.0 | JSON Lines telemetry; `float_roundtrip` makes float parsing exact |
 | `chacha20` 0.10 (feature `rng`) | sim | MIT OR Apache-2.0 | Deterministic random streams for the simulator (already used by core) |
 | `libm` 0.2 | core, sim | MIT | Pure-Rust maths functions, so simulations and detector scores are bit-identical across platforms |
+| `serde_json` 1.0.151 (feature `float_roundtrip`) | godot | MIT OR Apache-2.0 | Study plan JSON for `RearguardStudy` (already used by core) |
 | `zeroize` 1.9 | sim | Apache-2.0 OR MIT | Wipes the simulation seed on drop (already used by core) |
 | `postcard` 1.1 (feature `alloc`, no default features) | core | MIT OR Apache-2.0 | Binary encoding of wire-protocol messages |
 | `tokio` 1.53 (features `rt-multi-thread`, `net`, `io-util`, `time`, `sync`, `macros`, `signal`) | server | MIT | Async runtime and TCP |
