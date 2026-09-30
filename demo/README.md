@@ -387,7 +387,8 @@ folder in a temporary directory, deleted afterwards, which:
 Export presets: `scripts/study-export/export_presets.cfg` (pack embedded in the program,
 no console wrapper, Windows resources unmodified, so no `rcedit` is needed). Each zip
 holds the program, the extension library, a participant `README.txt`
-(`scripts/study-export/README.txt`) and `THIRD-PARTY-NOTICES.txt`. The notices come
+(`scripts/study-export/README.txt`), `THIRD-PARTY-NOTICES.txt`, and Rearguard's licence
+texts `LICENSE-MIT` and `LICENSE-APACHE`. The notices come
 from the Godot binary (`tools/godot_notices.gd`) and from the licence files of every
 crate compiled into the extension (`scripts/study-export/rust_notices.py`).
 
@@ -403,7 +404,8 @@ checks above are therefore study options, not scripts.
 1. `--smoke-decline`: the build starts and exits 0. The consent text on screen matches
    `study/consent_v1.txt` byte for byte, the key is packed, and the overlay, tests and
    tools are not. No file is written in the user folders, the working directory or the
-   build folder.
+   build folder. The build holds `LICENSE-MIT` and `LICENSE-APACHE`, identical to the
+   repository's.
 2. `--self-test` on a short protocol, then `tools/check_study_export.gd` (run with the
    editor) checks the export with the task 1.9 rules. It also replays every session
    with the drift re-derived from the facilitator's copy of the key, which proves that
@@ -414,16 +416,18 @@ run, smoke-tests the Linux build, and uploads the builds, their sizes and the ke
 artifacts. `study build (windows smoke)` runs the smoke test on the Windows build. The
 Windows DLL comes from `godot tests (windows)`.
 
-Sizes (CI run 36756462222, release `r37-a53a965`, 2026-09-30; every run prints its sizes
+Sizes (CI run 36765443315, release `r44-d93e066`, 2026-09-30; every run prints its sizes
 in the job summary and the `study-build-sizes` artifact):
 
 | File | Linux (bytes) | Windows (bytes) |
 |------|---------------|-----------------|
-| Program: release template with the pack embedded | 73,569,648 | 109,318,720 |
-| Extension library (release) | 2,485,512 | 1,865,216 |
-| `THIRD-PARTY-NOTICES.txt` | 545,840 | 545,840 |
-| `README.txt` | 1,507 | 1,507 |
-| **Zip sent to a volunteer** | **29,204,733** (27.9 MiB) | **38,586,713** (36.8 MiB) |
+| Program: release template with the pack embedded | 73,569,888 | 109,318,960 |
+| Extension library (release) | 2,485,432 | 1,865,216 |
+| `THIRD-PARTY-NOTICES.txt` | 545,867 | 545,867 |
+| `LICENSE-APACHE` | 11,358 | 11,358 |
+| `LICENSE-MIT` | 1,071 | 1,071 |
+| `README.txt` | 1,592 | 1,592 |
+| **Zip sent to a volunteer** | **29,209,943** (27.9 MiB) | **38,591,915** (36.8 MiB) |
 
 Unzipped, a build takes about 77 MB (Linux) or 112 MB (Windows).
 

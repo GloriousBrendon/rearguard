@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Test cheats: open-loop aimbots for the flick scenario.
 //!
 //! These exist only to exercise Rearguard's own detector inside this closed

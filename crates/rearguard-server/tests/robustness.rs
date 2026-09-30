@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Hostile, broken and vanishing clients: acceptance criteria 2 (at the socket) and 4.
 
 mod common;

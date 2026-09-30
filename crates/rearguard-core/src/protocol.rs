@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Client–server wire protocol, version 1.
 //!
 //! A connection carries frames in both directions. A frame is

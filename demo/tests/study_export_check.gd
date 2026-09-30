@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Checks on a study export zip (scripts/study.gd), shared by the repository tests
 ## (scripts/study_test.gd) and the packaged-build check (tools/check_study_export.gd),
 ## so an exported build passes exactly the same no-personal-data checks as task 1.9.

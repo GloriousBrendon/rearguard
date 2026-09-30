@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! The server: accepts connections, issues session seeds, feeds telemetry to the
 //! detector and stores evidence.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Ground-truth checks of the models: does a class's aim error follow the drift?
 //!
 //! This is **not a detector.** It uses [`ShotTruth`], the simulator's exact record of

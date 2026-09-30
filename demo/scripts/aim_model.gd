@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## View-angle state for the aim range, and the two hook points for the input drift.
 ##
 ## Angles are degrees, held as 64-bit floats (Vector2 is 32-bit, so it is used only

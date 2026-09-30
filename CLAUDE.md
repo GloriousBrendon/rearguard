@@ -12,7 +12,8 @@ of the cheat chain. The server holds the seeds and watches who reacts. Detection
 rate and false-positive rate are always reported together, never one without the
 other.
 
-The repository is private, on a personal GitHub account. Licence not chosen yet.
+The repository is private, on a personal GitHub account. Licensed MIT OR Apache-2.0
+(decision D3).
 
 ## Decisions
 
@@ -21,6 +22,13 @@ The repository is private, on a personal GitHub account. Licence not chosen yet.
 - **D2 (telemetry):** the client streams raw relative mouse deltas with per-event
   timestamps, the resulting view angle, and fire events. The server treats all
   of it as untrusted.
+- **D3 (project licence):** dual licence, `MIT OR Apache-2.0`, the Rust convention.
+  Anyone may use, modify and redistribute Rearguard, including in closed-source games.
+  Apache-2.0 is included for its explicit patent grant and patent-retaliation clause.
+  Texts in `LICENSE-MIT` and `LICENSE-APACHE`; `license` set in the workspace manifest
+  and inherited by every crate; every first-party source file carries an SPDX header.
+  Third-party and vendored code keeps its own licence (the gdext crates stay MPL-2.0,
+  D10). The dependency policy in `deny.toml` is unchanged by D3.
 - **D5 (seed delivery):** the drift API is built around epochs: the drift is a pure
   function of an epoch seed and a time index. v0 uses a single epoch covering the whole
   match; epoch length is configuration.
@@ -48,15 +56,19 @@ The repository is private, on a personal GitHub account. Licence not chosen yet.
   must pass `cargo deny --locked check` and be listed in the dependency table
   below with its licence.** Never weaken `deny.toml` to make a crate pass; a
   licence exception or advisory ignore needs an explicit decision, recorded here.
-- Licences are permissive-only until decision D3 (leading option: Apache-2.0).
-  The allowlist lives in `deny.toml`; copyleft and unknown licences fail.
+- Dependency licences are permissive-only (D3 did not change this). The allowlist
+  lives in `deny.toml`; copyleft and unknown licences fail.
 - Godot crates (`godot`, `godot-*`, `gdext*`, `gdextension*`, `gdnative*`) and
   `rearguard-godot` itself must never enter the graph of core, sim or server,
   even transitively. Enforced by `scripts/check-no-godot.sh`.
 - Tests live alongside the code. `cargo fmt`, clippy with warnings as errors, and
   `cargo test` must pass in CI on Linux and Windows.
-- Do not add a LICENSE file. The root README states "All rights reserved,
-  licence pending".
+- Rearguard is `MIT OR Apache-2.0` (D3). Every first-party source file (`.rs`, `.gd`,
+  `.sh`, `.py`, and any new source type in its own comment syntax) starts with
+  `SPDX-License-Identifier: MIT OR Apache-2.0` as its first line, or its second after a
+  shebang; `scripts/check-spdx.sh` enforces it. Never add the header to, or relicense,
+  third-party or vendored code. The licence texts in `LICENSE-MIT` and `LICENSE-APACHE`
+  are the unmodified originals.
 - Work goes on a branch with a pull request, never straight to `main`.
 
 ## Crate map
@@ -80,13 +92,16 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 cargo deny --locked check        # cargo install cargo-deny --locked (CI: 0.20.2)
 scripts/check-no-godot.sh
+scripts/check-spdx.sh
 ```
 
 CI: `.github/workflows/ci.yml`, on every branch push (so pull requests show the
 runs as checks). fmt, clippy and tests run on `ubuntu-latest` and
 `windows-latest` with build caching; the dependency policy job (cargo-deny plus
 the Godot ban) runs on Linux only, because both evaluate the lockfile graph for
-every target platform and give the same answer on any host.
+every target platform and give the same answer on any host. The `licence headers` job
+(`scripts/check-spdx.sh`, Linux only, since it reads the same tracked files on any host)
+fails if a first-party source file lacks its SPDX header.
 
 The `godot tests (linux)` and `godot tests (windows)` jobs run the demo's GDScript
 suite headless on `ubuntu-latest` and `windows-latest` (Git Bash), separately from the

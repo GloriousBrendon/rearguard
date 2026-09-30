@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Human-study build of the aim range (task 1.9). The scene is scenes/study.tscn.
 ##
 ## Flow:

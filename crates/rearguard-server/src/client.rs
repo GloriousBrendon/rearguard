@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! A minimal async client for the protocol, used by the simulator integration and the
 //! tests. A real game client (the Godot binding) will speak the same messages.
 

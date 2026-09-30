@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! `rearguard-sim`: generate simulated telemetry sessions for every player class.
 //!
 //! Runs only inside Rearguard's closed test environment; it writes files and nothing

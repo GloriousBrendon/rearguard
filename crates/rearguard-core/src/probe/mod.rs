@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Input probe: a secret, server-seeded drift applied to mouse sensitivity and recoil.
 //!
 //! The drift is a pure function of an [`EpochSeed`] and an epoch-local tick, so client

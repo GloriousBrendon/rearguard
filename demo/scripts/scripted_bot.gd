@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Scripted synthetic player for headless runs and CI. It sees the session state
 ## (its own view and the current target) and produces raw mouse counts and a
 ## trigger state, which the scene injects through the normal input path.

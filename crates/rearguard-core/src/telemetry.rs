@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Client telemetry schema, version 1 (decision D2).
 //!
 //! A session is a stream of [`Record`]s, one JSON object per line (JSON Lines, UTF-8,

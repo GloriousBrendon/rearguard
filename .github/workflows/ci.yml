@@ -60,6 +60,16 @@ jobs:
       - name: No Godot crates outside rearguard-godot
         run: scripts/check-no-godot.sh
 
+  # Every first-party source file starts with the SPDX header (decision D3). Linux only:
+  # it reads the tracked files, which are the same on any host.
+  headers:
+    name: licence headers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SPDX header in every first-party source file
+        run: scripts/check-spdx.sh
+
   # Headless GDScript tests for demo/, with the Rust extension (crates/rearguard-godot)
   # built and required. The same suite runs on Windows in `godot-windows`. To bump Godot,
   # change the pinned version and checksums in every job together (see demo/README.md,

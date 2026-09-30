@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 extends "res://tests/test_case.gd"
 
 const AimModel := preload("res://scripts/aim_model.gd")

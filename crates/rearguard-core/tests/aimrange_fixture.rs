@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Task 1.7, acceptance 5: a session recorded by the Godot aim range (rearguard.telemetry
 //! v1, written through the extension) goes straight into the detector.
 //!

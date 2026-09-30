@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Headless smoke test of an exported study build (task 1.9a), on Linux or Windows (Git Bash).
 #
 #   scripts/smoke-study-build.sh --build DIR --godot EDITOR --key KEY.hex --release LABEL
@@ -18,12 +19,28 @@
 #    text on screen is byte for byte demo/study/consent_v1.txt, that the build packs the
 #    key but not the developer overlay, tests or tools, and that no file was written
 #    anywhere in the sandbox or in the build folder.
+#    It also checks that the build folder holds Rearguard's licence texts, identical to
+#    LICENSE-MIT and LICENSE-APACHE at the repository root.
 # 2. Export: `--self-test` runs the study with the scripted bot on a short protocol and
 #    writes an export, which tools/check_study_export.gd checks with the same
 #    no-personal-data checks as task 1.9, plus a replay of every session with KEY.hex.
 set -euo pipefail
 
-usage() { sed -n '2,11p' "$0" >&2; exit 2; }
+usage() {
+  cat >&2 <<'USAGE'
+# Headless smoke test of an exported study build (task 1.9a), on Linux or Windows (Git Bash).
+#
+#   scripts/smoke-study-build.sh --build DIR --godot EDITOR --key KEY.hex --release LABEL
+#
+#   --build DIR      the unzipped build: RearguardStudy.x86_64 or RearguardStudy.exe, with
+#                    its extension library
+#   --godot EDITOR   the Godot 4.7.2 editor binary, for the export check. demo/ must be
+#                    imported and the Rust extension loadable by the editor
+#   --key KEY.hex    the facilitator's copy of the release's study key
+#   --release LABEL  the release label the build was exported with
+USAGE
+  exit 2
+}
 
 build="" godot="" key="" release=""
 while [ $# -gt 0 ]; do
@@ -94,6 +111,10 @@ if [ -z "$written" ]; then ok "no file written in the user folders or working di
 else bad "files written after declining:"; echo "$written" | sed 's/^/        /'; fi
 after="$(cd "$build" && find . -type f | sort)"
 [ "$before" = "$after" ] && ok "no file written in the build folder" || bad "the build folder changed"
+
+for f in LICENSE-MIT LICENSE-APACHE; do
+  cmp -s "$build/$f" "$repo/$f" && ok "ships $f unchanged" || bad "$f missing from the build or not the repository's"
+done
 
 # --- 2. An automated export, checked like task 1.9's ----------------------------------
 cat > "$work/short-protocol.json" <<'EOF'

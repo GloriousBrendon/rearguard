@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Prints input statistics for a recording, to compare display drivers and platforms:
 ##   godot --headless --path demo --script res://tools/summarize_recording.gd -- FILE.jsonl
 ##

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## In-memory log of a session's telemetry records, and a reader for telemetry files.
 ##
 ## Records are dictionaries in the rearguard.telemetry v1 schema (rearguard_core::telemetry),

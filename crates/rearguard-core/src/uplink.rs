@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Client side of the wire protocol ([`crate::protocol`]): streams one session's
 //! telemetry to a Rearguard server from a background thread.
 //!

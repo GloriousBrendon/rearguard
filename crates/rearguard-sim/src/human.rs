@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Synthetic closed-loop human aim model, and the same player using a recoil macro.
 //!
 //! **This is a model, not a human.** Its structure follows standard accounts of

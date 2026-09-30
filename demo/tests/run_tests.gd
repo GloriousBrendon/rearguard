@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Headless test runner. Runs every res://scripts/*_test.gd and exits non-zero on
 ## any failure:
 ##   godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd

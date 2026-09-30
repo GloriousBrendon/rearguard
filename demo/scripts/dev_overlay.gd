@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Developer overlay (debug builds only): server link, probe, uplink traffic, the
 ## server's live verdict and frame times, in a corner of the screen.
 ##

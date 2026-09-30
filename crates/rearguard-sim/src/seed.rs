@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! The top-level simulation seed and the deterministic random streams derived from it.
 //!
 //! Every random draw in a simulation comes from a ChaCha20 stream keyed by the

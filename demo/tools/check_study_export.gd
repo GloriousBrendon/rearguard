@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Checks an export written by an exported study build (task 1.9a), with the same
 ## no-personal-data checks as the repository tests (tests/study_export_check.gd).
 ## scripts/smoke-study-build.sh runs it with the Godot editor binary, on the machine that

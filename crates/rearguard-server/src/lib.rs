@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Rearguard server: issues session seeds, ingests untrusted client telemetry, runs the
 //! input-probe detector and stores the evidence (task 1.6).
 //!

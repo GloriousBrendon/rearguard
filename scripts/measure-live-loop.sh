@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Measures the aim range's frame-time cost with the input probe, the telemetry recorder
 # and the server uplink on versus off, and the uplink's bandwidth per minute of play
 # (task 1.7). Headless, scripted bot, `--fixed-fps 120` (frames run back to back, so a

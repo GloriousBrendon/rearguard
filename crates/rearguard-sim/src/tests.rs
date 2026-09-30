@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Model-level tests: drift correlation (the models behave as intended), determinism,
 //! telemetry consistency and batch generation.
 

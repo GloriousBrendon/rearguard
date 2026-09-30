@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Server configuration, read from a JSON file. There are no defaults: every limit and
 //! detector threshold is the operator's choice, and none of it is ever sent to a client.
 

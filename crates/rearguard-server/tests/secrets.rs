@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Acceptance criterion 3: neither the master secret nor any session seed (nor any
 //! resume token) appears in logs, command output or the evidence database. Runs in CI
 //! on every push (Linux and Windows), as part of `cargo test`.

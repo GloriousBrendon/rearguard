@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Minimal logging. Callers pass only non-secret values (session, match and connection
 //! identifiers, counts, scores): seeds, the master secret and resume tokens never reach
 //! a log line, and the tests check the output of whole sessions for them.

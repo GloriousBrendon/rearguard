@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Rearguard core: engine-agnostic probe, telemetry protocol and detection logic.
 //!
 //! This crate must never depend on Godot or any other engine.

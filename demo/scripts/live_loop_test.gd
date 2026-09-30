@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 extends "res://tests/test_case.gd"
 
 ## Task 1.7: the aim range against a real rearguard-server process (built with

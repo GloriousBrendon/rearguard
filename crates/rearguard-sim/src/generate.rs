@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Generating a batch of sessions into a directory.
 //!
 //! Layout: `<dir>/<class>/<scenario>-<index>.jsonl` (telemetry, one file per session)

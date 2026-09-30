@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Aim range scene: builds the world, captures raw mouse input, drives a
 ## RangeSession and draws it. The input path is documented in demo/README.md.
 ##

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! The client uplink (`rearguard_core::uplink`) against the real server, including its
 //! defined behaviour when the server connection drops (task 1.7, criterion 4).
 

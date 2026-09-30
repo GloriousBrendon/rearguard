@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Probe generator benchmarks: `cargo bench -p rearguard-core --bench probe`.
 
 use std::hint::black_box;

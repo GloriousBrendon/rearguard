@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 extends "res://tests/test_case.gd"
 
 ## Task 1.9: the human-study build (scripts/study.gd), run end to end with automated

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Player classes and running one simulated session.
 
 use rearguard_core::probe::{Amplitude, EpochSeed, ProbeConfig, ProbeGenerator, RootSeed};

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Base class for *_test.gd files. The runner calls every method named test_*.
 ## No third-party test framework: a failed check records a message and the test
 ## carries on, so one run reports every failure.

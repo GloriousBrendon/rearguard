@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Secret key material that redacts itself and zeroizes on drop.
 //!
 //! Every seed and derived secret in Rearguard lives in a [`SecretKey`] (or a typed

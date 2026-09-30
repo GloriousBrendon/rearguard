@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! `rearguard-eval`: offline evaluation of the input-probe detector on simulated
 //! players (task 1.3). Writes ROC data, detection rates with bootstrap intervals, times
 //! to detection, the slope-versus-significance comparison, the step-response results,

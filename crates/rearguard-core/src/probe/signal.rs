@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! The two candidate signal shapes, each producing a unit signal in Q30 `[-ONE, ONE]`.
 
 use core::fmt;

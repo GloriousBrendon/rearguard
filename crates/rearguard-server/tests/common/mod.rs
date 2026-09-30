@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Shared helpers for the server integration tests.
 #![allow(dead_code)]
 

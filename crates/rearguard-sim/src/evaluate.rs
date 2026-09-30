@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Offline evaluation of the input-probe detector (`rearguard_core::detect`) on
 //! simulated players.
 //!

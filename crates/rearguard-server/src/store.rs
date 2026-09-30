@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Evidence store (SQLite).
 //!
 //! No seed, secret or resume token is ever written here: a session's seed can always

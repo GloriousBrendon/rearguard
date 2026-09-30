@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT OR Apache-2.0
 """Prints the licence notices of every crate compiled into the Rearguard Godot extension.
 
 Usage: rust_notices.py REPO_ROOT
@@ -6,7 +7,7 @@ Usage: rust_notices.py REPO_ROOT
 Walks the normal (non-dev, non-build) dependency graph of rearguard-godot from
 `cargo metadata --locked`, for all targets, and prints each crate's name, version and
 licence expression, followed by the licence and notice files the crate ships. Workspace
-crates are listed without files (Rearguard: all rights reserved, licence pending).
+crates are listed without files (Rearguard: MIT OR Apache-2.0).
 """
 
 import json

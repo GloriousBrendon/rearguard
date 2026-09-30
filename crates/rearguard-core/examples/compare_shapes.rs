@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Compares the two candidate signal shapes; the numbers behind
 //! `docs/probe-signal-shapes.md`.
 //!

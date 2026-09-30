@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Forwards RangeSession records (rearguard.telemetry dictionaries) to the Rust
 ## extension's outputs: a RearguardRecorder (a JSON Lines file) or a RearguardClient
 ## (the server). Both take the same typed record_* calls; this script only unpacks the

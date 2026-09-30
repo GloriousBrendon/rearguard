@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## One scenario run: aim state, weapon, targets, scoring and recording. It has no
 ## scene or rendering dependency, so the headless tests drive it directly; the
 ## aim_range scene feeds it real (or bot) input events and physics ticks.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Input-probe detector: does a player's aim follow the secret drift?
 //!
 //! Server-side only. It needs the player's [`EpochSeed`], and its configuration

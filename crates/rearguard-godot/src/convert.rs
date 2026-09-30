@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Conversions with no Godot types in them, so `cargo test` can check them without a
 //! running engine (constructing a Godot `Variant` needs one).
 

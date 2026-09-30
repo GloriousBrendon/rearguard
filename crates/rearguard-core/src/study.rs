@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Human-study plans (task 1.9): which sessions a participant plays, in which order,
 //! and the blind two-alternative drift comparisons.
 //!

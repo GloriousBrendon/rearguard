@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Writes the Godot engine's licence notices, as compiled into the running binary, to a
 ## text file. scripts/export-study.sh runs it with the 4.7.2 editor binary for the study
 ## build's THIRD-PARTY-NOTICES.txt:

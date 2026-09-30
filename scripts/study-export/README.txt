@@ -34,3 +34,4 @@ until you delete it.
 
 Release: @RELEASE@
 Licence notices for the software in this build: THIRD-PARTY-NOTICES.txt
+Rearguard's licence: MIT OR Apache-2.0, at your option (LICENSE-MIT, LICENSE-APACHE)

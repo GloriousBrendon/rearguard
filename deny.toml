@@ -10,8 +10,9 @@ yanked = "deny"
 ignore = []
 
 [licenses]
-# Permissive only until decision D3 (project licence) is made. Copyleft (GPL, LGPL,
-# AGPL, MPL, EUPL, ...) and unknown or unlicensed crates fail the check.
+# Permissive only. Decision D3 made Rearguard itself MIT OR Apache-2.0 and left this
+# dependency policy unchanged. Copyleft (GPL, LGPL, AGPL, MPL, EUPL, ...) and unknown or
+# unlicensed crates fail the check.
 allow = [
     "MIT",
     "MIT-0",
@@ -46,7 +47,8 @@ include-dev = true
 include-build = true
 
 [licenses.private]
-# Workspace crates are `publish = false` and carry no licence yet (D3 pending).
+# Workspace crates are `publish = false`, so they are skipped here; their own licence is
+# MIT OR Apache-2.0 (D3), set in the workspace manifest.
 ignore = true
 
 [bans]

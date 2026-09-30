@@ -1,7 +1,10 @@
 # Licence notes
 
-Rearguard's own licence is not chosen yet (decision D3; the leading option is
-Apache-2.0). Until then the repository is "All rights reserved, licence pending".
+Rearguard's own code is licensed `MIT OR Apache-2.0` at the user's option (decision D3);
+the texts are `LICENSE-MIT` and `LICENSE-APACHE` at the repository root, and every
+first-party source file carries an SPDX header (checked by `scripts/check-spdx.sh`).
+Third-party code keeps its own licence: Rearguard's files can be MIT OR Apache-2.0 while
+depending on gdext (MPL-2.0, below), whose files are neither relicensed nor given our header.
 Dependencies must be permissive; `deny.toml` holds the allowlist, and CI enforces it
 with `cargo deny --locked check`.
 
@@ -55,7 +58,8 @@ against the release's SHA-512). These are distributed binaries, not crates, so
     policy, which covers crates only, and has no recorded decision yet (see the open
     question in the task 1.9a report).
 
-Every build ships `THIRD-PARTY-NOTICES.txt`:
+Every build ships Rearguard's own licence texts (`LICENSE-MIT`, `LICENSE-APACHE`) and
+`THIRD-PARTY-NOTICES.txt`:
 - the engine's licence text, per-component copyright notices and every licence text,
   from the Godot binary (`demo/tools/godot_notices.gd`);
 - the name, version, licence and shipped licence files of every crate compiled into the

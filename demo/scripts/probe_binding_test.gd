@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 extends "res://tests/test_case.gd"
 
 ## The Rust extension (crates/rearguard-godot) against the rearguard-core golden

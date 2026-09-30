@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Installs the input-probe drift on an AimModel's two hooks (task 1.5).
 ##
 ## The multipliers come from the Rust extension (RearguardProbe, crates/rearguard-godot),

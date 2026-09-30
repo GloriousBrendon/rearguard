@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Integer fixed-point maths for the probe signal.
 //!
 //! Values are Q30: `ONE` (2^30) stands for 1.0. Everything here is integer arithmetic

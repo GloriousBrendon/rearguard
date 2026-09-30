@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! The simulated aim range: a Rust mirror of the Godot demo's `RangeSession`
 //! (`demo/scripts/range_session.gd`, `scenario.gd`), with the input-probe drift applied
 //! at the two hook points, and telemetry emitted in the [`rearguard_core::telemetry`]

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Acceptance criteria 1 and 5: a simulated client (rearguard-sim) through the server to
 //! a verdict with a score and an evidence summary.
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
 ## Scenario definitions. Every target position is a pure function of the scenario
 ## kind and seed (and, for tracking, the scenario time), so a seed replays exactly.
 ##

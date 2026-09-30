@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Exports the human-study build (task 1.9a) for Linux and Windows x86_64.
 #
 #   scripts/export-study.sh --godot BIN --templates DIR --study-key FILE --release LABEL --out DIR
@@ -25,11 +26,30 @@
 # The staging directory, and the key copy in it, is deleted on exit.
 #
 # Output: rearguard-study-<release>-linux-x86_64.zip and ...-windows-x86_64.zip, each with
-# the program, the extension library, README.txt and THIRD-PARTY-NOTICES.txt. Sizes are
+# the program, the extension library, README.txt, THIRD-PARTY-NOTICES.txt and Rearguard's
+# licence texts (LICENSE-MIT, LICENSE-APACHE). Sizes are
 # printed (and added to the GitHub step summary in CI).
 set -euo pipefail
 
-usage() { sed -n '2,14p' "$0" >&2; exit 2; }
+usage() {
+  cat >&2 <<'USAGE'
+# Exports the human-study build (task 1.9a) for Linux and Windows x86_64.
+#
+#   scripts/export-study.sh --godot BIN --templates DIR --study-key FILE --release LABEL --out DIR
+#
+#   --godot BIN        the Godot 4.7.2 editor binary (Linux)
+#   --templates DIR    holds linux_release.x86_64 and windows_release_x86_64.exe from the
+#                      official 4.7.2-stable export templates (checked against SHA-512)
+#   --study-key FILE   this release's study key (64 hex digits, rearguard-server gen-secret)
+#   --release LABEL    this release's label, written into every export manifest
+#   --out DIR          where the two zips go
+#   --keep-build DIR   optional: also copy the unzipped builds to DIR/linux and DIR/windows
+#
+# The Rust extension must already be built in release mode for both platforms:
+# target/release/librearguard_godot.so and target/release/rearguard_godot.dll.
+USAGE
+  exit 2
+}
 
 godot="" templates="" key="" release="" out="" keep=""
 while [ $# -gt 0 ]; do
@@ -123,10 +143,6 @@ export_one Windows "$stage/build/windows/RearguardStudy.exe"
 [ -f "$stage/build/linux/librearguard_godot.so" ] || { echo "export-study: library missing from the Linux export" >&2; exit 1; }
 [ -f "$stage/build/windows/rearguard_godot.dll" ] || { echo "export-study: library missing from the Windows export" >&2; exit 1; }
 chmod 755 "$stage/build/linux/RearguardStudy.x86_64"
-if [ -n "$keep" ]; then
-  mkdir -p "$keep"
-  cp -R "$stage/build/linux" "$stage/build/windows" "$keep/"
-fi
 
 # 6. Licence notices: the engine's and the Rust crates compiled into the extension.
 #    Export templates cannot run scripts (official builds disable --script), so the
@@ -140,7 +156,7 @@ python3 "$repo/scripts/study-export/rust_notices.py" "$repo" > "$stage/rust-noti
 {
   echo "Third-party software in the Rearguard study build ($release)"
   echo
-  echo "Rearguard itself: all rights reserved, licence pending."
+  echo "Rearguard itself: MIT OR Apache-2.0, at your option (LICENSE-MIT, LICENSE-APACHE)."
   echo
   echo "The build contains the Godot Engine release export template (MIT, with the"
   echo "third-party components listed below) and the Rearguard extension library, built"
@@ -159,10 +175,10 @@ python3 "$repo/scripts/study-export/rust_notices.py" "$repo" > "$stage/rust-noti
   cat "$stage/godot-notices.txt"
 } > "$notices"
 
-# 7. Zip each build with the participant README and the notices.
+# 7. Zip each build with the participant README, the notices and Rearguard's licence.
 sed "s|@RELEASE@|$release|" "$repo/scripts/study-export/README.txt" > "$stage/README.txt"
 for p in linux windows; do
-  cp "$stage/README.txt" "$notices" "$stage/build/$p/"
+  cp "$stage/README.txt" "$notices" "$repo/LICENSE-MIT" "$repo/LICENSE-APACHE" "$stage/build/$p/"
   python3 - "$stage/build/$p" "$out/rearguard-study-$release-$p-x86_64.zip" "rearguard-study-$release-$p" <<'EOF'
 import os, sys, zipfile
 src, dest, top = sys.argv[1:4]
@@ -175,6 +191,11 @@ with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
             z.writestr(info, f.read(), compresslevel=9)
 EOF
 done
+# The kept builds are exactly what the zips hold.
+if [ -n "$keep" ]; then
+  mkdir -p "$keep"
+  cp -R "$stage/build/linux" "$stage/build/windows" "$keep/"
+fi
 
 # 8. Sizes.
 report="$out/build-sizes.md"

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! `rearguard-server`: the Rearguard server (task 1.6). Loopback only until TLS and
 //! authentication (task 3.3).
 

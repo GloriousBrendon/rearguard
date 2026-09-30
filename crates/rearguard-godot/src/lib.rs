@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Rearguard Godot binding: a thin gdext layer over `rearguard-core`.
 //!
 //! Three GDScript classes:

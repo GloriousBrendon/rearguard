@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT OR Apache-2.0
 # Fails if rearguard-core, -sim or -server reach any Godot binding crate, directly or
 # transitively, as a normal, build or dev dependency, on any target, with any features.
 # Only rearguard-godot may depend on Godot. Run from the workspace root.

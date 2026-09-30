@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! Rearguard sim: the closed test environment for synthetic players and test cheats.
 //!
 //! Simulated players (a closed-loop human model, a recoil macro and five aimbots)
