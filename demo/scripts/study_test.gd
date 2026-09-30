@@ -4,7 +4,7 @@ extends "res://tests/test_case.gd"
 ## consent, the scripted bot and seeded answers.
 
 const Study := preload("res://scripts/study.gd")
-const Recorder := preload("res://scripts/recorder.gd")
+const Check := preload("res://tests/study_export_check.gd")
 const STUDY_SCENE := preload("res://scenes/study.tscn")
 
 ## Test study key (public test data, not a secret).
@@ -20,20 +20,6 @@ const PROTOCOL := {
 	],
 	"blind": {"scenario": "flick", "interval_duration_s": 1.5, "amplitudes_ppm": [0, 20000], "repeats": 1},
 }
-## The only keys the export manifest may contain, per level.
-const MANIFEST_KEYS := ["format", "version", "study_id", "protocol_version", "protocol",
-		"consent_version", "participant_id", "randomisation_seed", "plan", "input", "sessions", "trials"]
-const INPUT_KEYS := ["godot_version", "os_name", "display_driver", "accumulated_input",
-		"delta_source", "debug_build"]
-const SESSION_KEYS := ["label", "block", "condition", "amplitude_ppm", "scenario", "scenario_seed",
-		"duration_s", "file", "complete", "probe_applied", "shots", "hits", "trial", "interval"]
-const TRIAL_KEYS := ["index", "amplitude_ppm", "drifted", "order", "answer", "correct", "response_ms"]
-## Telemetry header fields the export may carry (rearguard.telemetry v1).
-const HEADER_KEYS := ["type", "ts_us", "frame", "tick", "format", "version", "match_id", "player_id",
-		"source", "probe_start_us", "deg_per_count", "physics_hz", "scenario", "scenario_seed",
-		"duration_s", "recoil_pattern", "target_distance_m", "target_radius_m"]
-
-
 func _dir(name: String) -> String:
 	return ProjectSettings.globalize_path("user://test/study-%s" % name)
 
@@ -75,25 +61,10 @@ func _run_study(name: String, extra: Dictionary = {}) -> Dictionary:
 
 ## Reads every entry of the export zip into {name: bytes}.
 func _unzip(path: String) -> Dictionary:
-	var zip := ZIPReader.new()
-	if zip.open(path) != OK:
+	var files := Check.unzip(path)
+	if files.is_empty():
 		failures.append("%s: cannot open %s" % [_current, path])
-		return {}
-	var out := {}
-	for f in zip.get_files():
-		if not f.ends_with("/"): # Directory entries, if the reader lists any.
-			out[f] = zip.read_file(f)
-	zip.close()
-	return out
-
-
-## The telemetry records of one exported session file.
-func _records(files: Dictionary, name: String, scratch: String) -> Array[Dictionary]:
-	var path := scratch.path_join(name.get_file())
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	f.store_buffer(files.get(name, PackedByteArray()))
-	f.close()
-	return Recorder.read_file(path)
+	return files
 
 
 # Acceptance 1, 2 and 3: the whole flow, labelled baseline sessions with drift on and
@@ -114,6 +85,8 @@ func test_automated_study_exports_labelled_sessions_and_trials() -> void:
 	check_eq(manifest.participant_id, PARTICIPANT)
 	check_eq(manifest.randomisation_seed, SEED)
 	check_eq(manifest.consent_version, "v1")
+	check_eq(manifest.release, "dev", "release label of a repository run")
+	check_eq(manifest.automated, true, "an automated run is marked as such")
 
 	# Reproducible: the same protocol and logged seed give the same plan, and the
 	# manifest's plan is exactly that.
@@ -128,10 +101,6 @@ func test_automated_study_exports_labelled_sessions_and_trials() -> void:
 	check_eq(sessions.size(), 2 + 4, "2 baseline sessions and 2 trials of 2 intervals")
 	var expected_files := ["manifest.json"]
 	var conditions := {}
-	var scratch := _dir("flow").path_join("unzipped")
-	DirAccess.make_dir_recursive_absolute(scratch)
-	_clear(scratch)
-	var probe: RefCounted = ClassDB.instantiate("RearguardProbe")
 	for s: Dictionary in sessions:
 		expected_files.append(s.file)
 		check(s.complete, "%s complete" % s.label)
@@ -140,7 +109,7 @@ func test_automated_study_exports_labelled_sessions_and_trials() -> void:
 		check_eq(s.condition, "drift-off" if amplitude == 0 else "drift-%dppm" % amplitude, "%s condition" % s.label)
 		if s.block == "baseline":
 			conditions[s.condition] = true
-		var records := _records(files, s.file, scratch)
+		var records := Check.records(files, s.file)
 		check(records.size() > 10, "%s records: %d" % [s.label, records.size()])
 		if records.is_empty():
 			continue
@@ -149,29 +118,13 @@ func test_automated_study_exports_labelled_sessions_and_trials() -> void:
 		check_eq(int(header.scenario_seed), int(s.scenario_seed), "%s scenario seed" % s.label)
 		check(records[-1].type == "end" and records[-1].complete == true, "%s end record" % s.label)
 		# Re-derive this session's probe from the study key and replay the moves.
-		check_eq(probe.start_session_derived(_dir("flow").path_join("study-key.hex"), header.match_id, 0,
-				amplitude, int(header.probe_start_us)), OK, "%s derive" % s.label)
-		var dpc := float(header.deg_per_count)
-		var yaw := 0.0
-		var nominal := 0.0
-		var worst := 0.0
-		for r in records:
-			if r.type == "move":
-				var d := -float(r.dx) * dpc
-				yaw += d * probe.sensitivity_multiplier(int(r.ts_us))
-				nominal += d
-			elif r.type == "recoil":
-				yaw += float(r.kick_yaw) * probe.recoil_scale(int(r.ts_us))
-				nominal += float(r.kick_yaw)
-			else:
-				continue
-			worst = maxf(worst, absf(yaw - float(r.yaw)))
-		check(worst < 1e-9, "%s replays with the derived probe (worst %s)" % [s.label, worst])
+		var replayed := Check.replay(records, _dir("flow").path_join("study-key.hex"), amplitude)
+		check_eq(replayed.error, OK, "%s derive" % s.label)
+		check(replayed.worst < 1e-9, "%s replays with the derived probe (worst %s)" % [s.label, replayed.worst])
 		if amplitude == 0:
-			check(absf(yaw - nominal) < 1e-12, "%s has no drift" % s.label)
+			check(replayed.drift < 1e-12, "%s has no drift" % s.label)
 		else:
-			check(absf(yaw - nominal) > 1e-6, "%s drifted (%s deg)" % [s.label, absf(yaw - nominal)])
-	probe.stop()
+			check(replayed.drift > 1e-6, "%s drifted (%s deg)" % [s.label, replayed.drift])
 	check(conditions.has("drift-off") and conditions.has("drift-20000ppm"), "baseline has drift on and off: %s" % str(conditions.keys()))
 	expected_files.sort()
 	var names := files.keys()
@@ -211,46 +164,8 @@ func test_export_contains_no_personal_data() -> void:
 	var files := _unzip(info.path)
 	if files.is_empty():
 		return
-	var manifest: Dictionary = JSON.parse_string(files["manifest.json"].get_string_from_utf8())
-	for k in manifest.keys():
-		check(k in MANIFEST_KEYS, "manifest key %s" % k)
-	for k in manifest.input.keys():
-		check(k in INPUT_KEYS, "input key %s" % k)
-	for s: Dictionary in manifest.sessions:
-		for k in s.keys():
-			check(k in SESSION_KEYS, "session key %s" % k)
-	for t: Dictionary in manifest.trials:
-		for k in t.keys():
-			check(k in TRIAL_KEYS, "trial key %s" % k)
-	var scratch := _dir("privacy").path_join("unzipped")
-	DirAccess.make_dir_recursive_absolute(scratch)
-	_clear(scratch)
-	for s: Dictionary in manifest.sessions:
-		var records := _records(files, s.file, scratch)
-		for k in records[0].keys():
-			check(k in HEADER_KEYS, "telemetry header key %s" % k)
-
-	var forbidden := {"study key": KEY_HEX}
-	for v in ["USER", "USERNAME", "LOGNAME", "HOSTNAME", "COMPUTERNAME", "HOME", "USERPROFILE"]:
-		var value := OS.get_environment(v)
-		if value.length() >= 3:
-			forbidden[v] = value
-	forbidden["user data dir"] = OS.get_user_data_dir()
-	forbidden["unique id"] = OS.get_unique_id()
-	forbidden["model"] = OS.get_model_name()
-	var today := Time.get_date_dict_from_system()
-	forbidden["date"] = "%04d-%02d-%02d" % [today.year, today.month, today.day]
-	forbidden["date (compact)"] = "%04d%02d%02d" % [today.year, today.month, today.day]
-	for what in forbidden:
-		var value: String = forbidden[what]
-		if value.length() < 3 or value == "GenericDevice":
-			continue
-		for name in files:
-			check(not (files[name] as PackedByteArray).get_string_from_utf8().contains(value),
-					"%s must not contain the %s" % [name, what])
-	# Entry names are stored uncompressed in the zip; they are only fixed names and labels.
-	for name in files:
-		check(name == "manifest.json" or (name as String).begins_with("sessions/"), "entry %s" % name)
+	for f in Check.personal_data_failures(files, KEY_HEX):
+		failures.append("%s: %s" % [_current, f])
 
 
 # Declining consent writes nothing at all.
@@ -282,7 +197,41 @@ func test_parse_args() -> void:
 	check_eq(c.study_key, "k.hex")
 	check_eq(c.protocol, "p.json")
 	check_eq(c.export_dir, "out")
-	check_eq(c.auto, false, "automation is never enabled from the command line")
+	check_eq(c.auto, false, "no automation without --self-test")
+	check_eq(c.smoke_decline, false)
+	check_eq(Study.parse_args(PackedStringArray(["--smoke-decline"])).smoke_decline, true)
+	check_eq(Study.parse_args(PackedStringArray(["--smoke-decline"])).auto, false, "the smoke check can only decline")
+	check_eq(Study.parse_args(PackedStringArray(["--self-test"])).auto, true, "--self-test: the bot plays")
+	check_eq(Study.parse_args(PackedStringArray(["--self-test"])).quit_when_done, true)
+	check_eq(c.quit_when_done, false)
+
+
+# A repository run has no packed key: the default is the user-folder key file, and the
+# release label is "dev". (Exported builds are checked by scripts/smoke-study-build.sh.)
+func test_repository_run_uses_the_user_folder_key() -> void:
+	check(not FileAccess.file_exists(Study.PACKED_KEY_PATH), "no study key in the repository")
+	check(not FileAccess.file_exists(Study.RELEASE_PATH), "no release label in the repository")
+	check_eq(Study.default_config().study_key, "user://study/study-key.hex")
+
+
+# The extension reads a res:// key file itself (a key packed into an exported build).
+func test_extension_reads_res_key_paths() -> void:
+	if not extension_loaded():
+		return
+	var probe: RefCounted = ClassDB.instantiate("RearguardProbe")
+	check_eq(probe.start_session_derived("res://study/no-such-key.hex", "m", 0, 5000, 0), ERR_FILE_NOT_FOUND)
+	# Any res:// file that is not 64 hex digits is refused.
+	check_eq(probe.start_session_derived("res://study/protocol.json", "m", 0, 5000, 0), ERR_INVALID_DATA)
+	check(not probe.is_active(), "no session from an invalid key")
+	# The same key read as res:// and as a file-system path gives the same drift.
+	var packed := "res://tests/public-test-key.hex"
+	check_eq(FileAccess.get_file_as_string(packed).strip_edges(), KEY_HEX, "test key file is KEY_HEX")
+	check_eq(probe.start_session_derived(packed, "m", 0, 20000, 0), OK, "derive from res://")
+	var from_res := [probe.multiplier_at_tick(0, 1234), probe.multiplier_at_tick(1, 99)]
+	check_eq(probe.start_session_derived(ProjectSettings.globalize_path(packed), "m", 0, 20000, 0), OK)
+	check_eq([probe.multiplier_at_tick(0, 1234), probe.multiplier_at_tick(1, 99)], from_res, "same drift")
+	check(from_res[0] != 1.0, "drift applied")
+	probe.stop()
 
 
 # The shipped protocol plans: 6 baseline rounds and 20 trials over the D6 amplitude grid.

@@ -201,7 +201,9 @@ func _start_local_probe(ts: int) -> void:
 	var p: RefCounted = ClassDB.instantiate("RearguardProbe")
 	var err: int
 	if not str(config.probe_study_key).is_empty():
-		err = p.start_session_derived(ProjectSettings.globalize_path(config.probe_study_key),
+		# res:// may be a key packed into an exported study build; the extension reads it.
+		var key: String = config.probe_study_key
+		err = p.start_session_derived(key if key.begins_with("res://") else ProjectSettings.globalize_path(key),
 				str(config.probe_match_id), 0, config.probe_amplitude_ppm, ts)
 		run_info.probe_seed = "study key"
 	elif str(config.probe_seed_file).is_empty():

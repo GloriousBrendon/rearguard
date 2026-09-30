@@ -67,7 +67,7 @@ The repository is private, on a personal GitHub account. Licence not chosen yet.
 | `crates/rearguard-sim`    | Closed test environment: synthetic players, test cheats, DR/FPR; `rearguard-sim` CLI. | Never  |
 | `crates/rearguard-server` | Issues seeds (derived, never stored), ingests telemetry over the `protocol` (loopback only), runs the detector, stores evidence in SQLite; see its README. | Never  |
 | `crates/rearguard-godot`  | Thin gdext binding over core: `RearguardProbe`, `RearguardRecorder` (GDExtension, see its README). | Only here |
-| `demo/`                   | Godot 4.7.2 aim range (GDScript, no addons); see `demo/README.md`. | n/a    |
+| `demo/`                   | Godot 4.7.2 aim range (GDScript, no addons) and the human-study scene; see `demo/README.md`. Study builds for volunteers: `scripts/export-study.sh`. | n/a    |
 
 Dependency direction: `sim`, `server` and `godot` depend on `core`; `core`
 depends on nothing in the workspace.
@@ -88,8 +88,9 @@ runs as checks). fmt, clippy and tests run on `ubuntu-latest` and
 the Godot ban) runs on Linux only, because both evaluate the lockfile graph for
 every target platform and give the same answer on any host.
 
-The `godot tests (linux)` job runs the demo's GDScript suite headless on
-`ubuntu-latest`, separately from the Rust jobs. It uses Godot 4.7.2-stable from
+The `godot tests (linux)` and `godot tests (windows)` jobs run the demo's GDScript
+suite headless on `ubuntu-latest` and `windows-latest` (Git Bash), separately from the
+Rust jobs. It uses Godot 4.7.2-stable from
 the official `godot-builds` release. The version (`GODOT_VERSION`) and the zip's
 SHA-512 (`GODOT_ZIP_SHA512`) are pinned in the workflow, and the checksum is
 verified on every run, so a mismatch fails the job. The zip is cached, keyed on
@@ -106,9 +107,18 @@ cargo build -p rearguard-godot -p rearguard-server   # the GDExtension library a
 REARGUARD_REQUIRE_EXTENSION=1 godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
 ```
 
-To bump Godot, change `GODOT_VERSION` and `GODOT_ZIP_SHA512` together; the
-checksum comes from the release's `SHA512-SUMS.txt`. The full steps are in
-`demo/README.md`, under "CI".
+To bump Godot, change `GODOT_VERSION` and every pinned checksum (`GODOT_ZIP_SHA512`,
+`GODOT_WIN_ZIP_SHA512`, `GODOT_TEMPLATES_SHA512`) in every job together; the checksums
+come from the release's `SHA512-SUMS.txt`. The full steps are in `demo/README.md`, under
+"CI".
+
+Study builds (task 1.9a): the `study build (export, linux smoke)` job exports the
+volunteers' Linux and Windows builds (`scripts/export-study.sh`) with the official
+4.7.2 release templates (SHA-512 checked every run), a fresh study key per run, and the
+release DLL from `godot tests (windows)`. It smoke-tests the Linux build
+(`scripts/smoke-study-build.sh`) and uploads the builds, sizes and key as artifacts.
+`study build (windows smoke)` smoke-tests the Windows build. The key is never committed
+and goes to the facilitator only (`docs/study/facilitator-instructions.md`).
 
 ## Third-party dependencies
 
@@ -141,7 +151,18 @@ direct dependencies; `cargo deny` checks their transitive crates too, and every 
 resolves to an allowlisted licence.
 
 CI tooling (not crates, pinned by commit SHA in the workflow):
-`actions/cache` (MIT), `taiki-e/install-action` (Apache-2.0 OR MIT),
-`cargo-deny` (Apache-2.0 OR MIT). The Godot job downloads the Godot 4.7.2-stable
-editor binary (MIT), pinned by SHA-512 rather than by commit. Keep CI tooling
-permissive too.
+`actions/cache` (MIT), `actions/upload-artifact` and `actions/download-artifact`
+(MIT), `taiki-e/install-action` (Apache-2.0 OR MIT), `cargo-deny` (Apache-2.0 OR MIT).
+The Godot jobs download the Godot 4.7.2-stable editor binaries for Linux and Windows
+(MIT), pinned by SHA-512 rather than by commit. Keep CI tooling permissive too.
+
+Godot export templates (shipped inside the study builds, task 1.9a): the official
+4.7.2-stable release templates `linux_release.x86_64` and
+`windows_release_x86_64.exe`, from `Godot_v4.7.2-stable_export_templates.tpz`, pinned
+by SHA-512. Godot itself is MIT. The compiled-in third-party components are
+MIT/Expat, BSD-2-Clause, BSD-3-Clause, Apache-2.0, Zlib, Unlicense, MIT-0, CC0-1.0,
+BSL-1.0, Unicode, X11, IJG, and the HarfBuzz and glslang licences; also FreeType under
+FTL (BSD-style with a credit clause), fonts under OFL-1.1, the Godot logo under
+CC-BY-4.0, and Mozilla's CA certificate bundle under **MPL-2.0** (unmodified data,
+unused by the study; no decision recorded yet). Details and the notices shipped in each
+build: `docs/licence-notes.md`.

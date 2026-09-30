@@ -1,1 +1,4 @@
 /target
+# Study builds pack a per-release key and label (scripts/export-study.sh); never commit them.
+/demo/study/study-key.hex
+/demo/study/release.txt

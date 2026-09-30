@@ -29,3 +29,35 @@ Decision D10 accepts a narrow exception:
   are not affected.
 
 No other licence exceptions exist.
+
+## Study builds: Godot export templates (task 1.9a)
+
+The exported study builds (`scripts/export-study.sh`) contain the official Godot
+4.7.2-stable **release export templates** (`linux_release.x86_64`,
+`windows_release_x86_64.exe` from `Godot_v4.7.2-stable_export_templates.tpz`, checked
+against the release's SHA-512). These are distributed binaries, not crates, so
+`cargo deny` does not see them. Their licences, from the engine's own copyright data
+(`Engine.get_copyright_info()`, which Godot builds from its `COPYRIGHT.txt`):
+
+- **Godot Engine:** MIT (Expat).
+- **Third-party components compiled in:** mostly MIT/Expat, BSD-2-Clause,
+  BSD-3-Clause, Apache-2.0, Zlib, Unlicense, MIT-0, CC0-1.0, BSL-1.0 (Clipper2),
+  Unicode (ICU), X11, IJG (libjpeg-turbo), and the HarfBuzz and glslang licences
+  (both permissive).
+- **Worth noting:**
+  - **FreeType:** used under the FreeType Licence (FTL), a BSD-style licence with an
+    advertising-credit clause (FreeType is dual FTL/GPL-2.0; Godot uses FTL).
+  - **Fonts** (Inter, JetBrains Mono, Noto Sans, Open Sans, Vazirmatn): SIL OFL-1.1.
+  - **Godot logo:** CC-BY-4.0.
+  - **CA certificates** (Mozilla's root store, as data): **MPL-2.0**, file-level weak
+    copyleft on unmodified data. The builds never use it (they make no network
+    connections), but it is compiled into the templates. This is outside the `deny.toml`
+    policy, which covers crates only, and has no recorded decision yet (see the open
+    question in the task 1.9a report).
+
+Every build ships `THIRD-PARTY-NOTICES.txt`:
+- the engine's licence text, per-component copyright notices and every licence text,
+  from the Godot binary (`demo/tools/godot_notices.gd`);
+- the name, version, licence and shipped licence files of every crate compiled into the
+  extension (`scripts/study-export/rust_notices.py`), with a pointer to gdext's source
+  for MPL-2.0.

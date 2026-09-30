@@ -32,7 +32,8 @@ use rearguard_core::telemetry::{self, Record};
 use rearguard_core::uplink::{SessionInfo, Uplink, UplinkConfig, UplinkStatus};
 
 use crate::convert::{
-    Field, SeedSource, header_from, load_or_create_seed, load_root, records, to_u32, to_u64,
+    Field, SeedError, SeedSource, header_from, load_or_create_seed, load_root, records,
+    root_from_bytes, to_u32, to_u64,
 };
 
 struct RearguardExtension;
@@ -42,6 +43,19 @@ struct RearguardExtension;
 // `compatibility_minimum = 4.7`, matching the `api-4-7` feature this crate is built with.
 #[gdextension]
 unsafe impl ExtensionLibrary for RearguardExtension {}
+
+/// Loads a root key from a `res://` path, which may be inside an exported build's pack.
+/// The bytes Godot returns are wiped after parsing.
+fn load_packed_root(path: &GString) -> Result<rearguard_core::probe::RootSeed, SeedError> {
+    if !godot::classes::FileAccess::file_exists(path) {
+        return Err(SeedError::NotFound);
+    }
+    let mut bytes = godot::classes::FileAccess::get_file_as_bytes(path);
+    if bytes.is_empty() {
+        return Err(SeedError::Io);
+    }
+    root_from_bytes(bytes.as_mut_slice())
+}
 
 /// One active probe session.
 struct Session {
@@ -166,6 +180,9 @@ impl RearguardProbe {
     /// digits) through the probe key hierarchy: `match_id` → `player_id` → epoch 0. The
     /// key and the seed stay inside Rust. Whoever holds the key file can re-derive the
     /// seed for analysis.
+    ///
+    /// `key_path` is a file-system path, or a `res://` path for a key packed into an
+    /// exported build (read through Godot's `FileAccess`, still inside Rust).
     #[func]
     fn start_session_derived(
         &mut self,
@@ -178,7 +195,13 @@ impl RearguardProbe {
         let Some(player) = to_u64(player_id) else {
             return Error::ERR_INVALID_PARAMETER;
         };
-        match load_root(&key_path.to_string()) {
+        let path = key_path.to_string();
+        let root = if path.starts_with("res://") {
+            load_packed_root(&key_path)
+        } else {
+            load_root(&path)
+        };
+        match root {
             Ok(root) => {
                 let seed = root
                     .match_key(match_id.to_string().as_bytes())

@@ -68,9 +68,13 @@ call in `timeout` (see "CI").
 
 ## CI
 
-The `godot tests (linux)` job in `.github/workflows/ci.yml` runs this test suite
-on every branch push, on `ubuntu-latest` only (Windows Godot runs are a later
-task). It is independent of the Rust jobs and shows as its own check.
+The `godot tests (linux)` and `godot tests (windows)` jobs in
+`.github/workflows/ci.yml` run this test suite on every branch push, on
+`ubuntu-latest` and `windows-latest`. They are independent of the Rust jobs and show
+as their own checks. The Windows job runs the same steps in Git Bash with the
+official `Godot_v<version>_win64.exe.zip` (its console wrapper, so output reaches the
+log), and then builds the release extension DLL for the study export (see "Study
+builds").
 
 1. It restores `~/godot-dl/godot.zip` from the Actions cache. On a miss, it
    downloads `Godot_v<version>_linux.x86_64.zip` from the official
@@ -92,11 +96,15 @@ not load.
 
 To bump Godot, change these values together in one pull request:
 
-1. `GODOT_VERSION` in the workflow's `godot` job, for example `4.7.3-stable`.
-2. `GODOT_ZIP_SHA512` in the same job. Copy it from the line for
-   `Godot_v<version>_linux.x86_64.zip` (the standard build, not `mono`) in that
-   release's `SHA512-SUMS.txt`:
-   `https://github.com/godotengine/godot-builds/releases/download/<version>/SHA512-SUMS.txt`.
+1. `GODOT_VERSION` in every job that downloads Godot (`godot`, `godot-windows`,
+   `study-build`, `study-smoke-windows`), for example `4.7.3-stable`.
+2. The checksums, from that release's `SHA512-SUMS.txt`
+   (`https://github.com/godotengine/godot-builds/releases/download/<version>/SHA512-SUMS.txt`),
+   standard builds, not `mono`:
+   - `GODOT_ZIP_SHA512`: `Godot_v<version>_linux.x86_64.zip` (`godot`, `study-build`);
+   - `GODOT_WIN_ZIP_SHA512`: `Godot_v<version>_win64.exe.zip` (`godot-windows`,
+     `study-smoke-windows`);
+   - `GODOT_TEMPLATES_SHA512`: `Godot_v<version>_export_templates.tpz` (`study-build`).
 3. This README's "Godot version" section, and `config/features` in
    `project.godot` if the minor version changes.
 4. Any pinned test values that depend on Godot's random number generator (for
@@ -325,7 +333,7 @@ The facilitator's steps are in `docs/study/facilitator-instructions.md`.
    The temporary session files are then deleted.
 
 **Drift seeds.** Each round's probe seed is derived inside the extension from the
-facilitator's study key (`--study-key`, default `user://study/study-key.hex`). The
+facilitator's study key (`--study-key`; default: the key packed into a study build, else `user://study/study-key.hex`). The
 derivation is root → match → player 0 → epoch 0, with the match id
 `study:<study>:<participant>:<label>`, which is also the recording header's
 `match_id`. The export never holds the key or a seed; the analysis re-derives them
@@ -335,6 +343,14 @@ from the key, as `scripts/study_test.gd` does.
 without the environment sidecar file. Its HUD shows only the round's neutral title,
 the time left and hits. Nothing on screen shows a round's condition or amplitude.
 
+**Build checks** (options after `--`, for exported builds; see "Study builds"):
+- `--smoke-decline` shows the consent screen, prints the SHA-256 of the text on screen
+  and what the build packs, then presses "I do not agree" and "Quit". It can only
+  decline.
+- `--self-test` runs the study with no participant: the scripted bot plays, answers
+  come from a seeded RNG, and the export is marked `"automated": true`, so it can never
+  pass for a person's data. The build quits once the export is written.
+
 **Tests** (`scripts/study_test.gd`) run the whole flow with automated consent, the
 scripted bot and seeded answers. They check:
 - the labelled baseline sessions, drift on and off, each replayed with the probe
@@ -343,7 +359,73 @@ scripted bot and seeded answers. They check:
 - that the plan re-derives from the logged seed;
 - that the export holds only allowlisted keys and none of the machine's user name,
   host name, home or user-data path, unique id, today's date or the study key;
-- that declining writes nothing.
+- that declining writes nothing;
+- that the extension reads a `res://` key (as packed into study builds) exactly like a
+  file-system one (`tests/public-test-key.hex`, public test data).
+
+The export checks live in `tests/study_export_check.gd`, shared with the check of
+exported builds, so both apply exactly the same rules.
+
+## Study builds
+
+Volunteers run exported builds, not the repository (task 1.9a). The facilitator's side
+is in `docs/study/facilitator-instructions.md`.
+
+`scripts/export-study.sh` exports Linux and Windows x86_64 builds with the official
+Godot 4.7.2 **release** templates (never debug ones). It works on a staging copy of this
+folder in a temporary directory, deleted afterwards, which:
+- packs the release's study key as `res://study/study-key.hex` and its label as
+  `res://study/release.txt`. Neither is ever in the repository (`.gitignore` blocks
+  them). The study uses the packed key by default, and the extension reads it from the
+  pack itself, so it never passes through GDScript;
+- leaves out the developer overlay (`scripts/dev_overlay.gd`), the tests (`*_test.gd`,
+  `tests/`) and `tools/`;
+- makes `scenes/study.tscn` the main scene;
+- turns off Godot's log file and shader cache, so a build that is declined writes
+  nothing at all.
+
+Export presets: `scripts/study-export/export_presets.cfg` (pack embedded in the program,
+no console wrapper, Windows resources unmodified, so no `rcedit` is needed). Each zip
+holds the program, the extension library, a participant `README.txt`
+(`scripts/study-export/README.txt`) and `THIRD-PARTY-NOTICES.txt`. The notices come
+from the Godot binary (`tools/godot_notices.gd`) and from the licence files of every
+crate compiled into the extension (`scripts/study-export/rust_notices.py`).
+
+The manifest's `release` field is the label (`dev` from the repository), and
+`input.debug_build` is `false` in a study build.
+
+Official export templates cannot run `--script`, `--scene` or `--main-pack` (they are
+built without `OVERRIDE_PATH_ENABLED`), so a build can only run the study. The build
+checks above are therefore study options, not scripts.
+
+`scripts/smoke-study-build.sh` tests an exported build headless, on Linux or Windows
+(Git Bash), with fresh, empty user folders:
+1. `--smoke-decline`: the build starts and exits 0. The consent text on screen matches
+   `study/consent_v1.txt` byte for byte, the key is packed, and the overlay, tests and
+   tools are not. No file is written in the user folders, the working directory or the
+   build folder.
+2. `--self-test` on a short protocol, then `tools/check_study_export.gd` (run with the
+   editor) checks the export with the task 1.9 rules. It also replays every session
+   with the drift re-derived from the facilitator's copy of the key, which proves that
+   copy is the key in the build.
+
+In CI, `study build (export, linux smoke)` exports both builds from a fresh key per
+run, smoke-tests the Linux build, and uploads the builds, their sizes and the key as
+artifacts. `study build (windows smoke)` runs the smoke test on the Windows build. The
+Windows DLL comes from `godot tests (windows)`.
+
+Sizes (CI run 36756462222, release `r37-a53a965`, 2026-09-30; every run prints its sizes
+in the job summary and the `study-build-sizes` artifact):
+
+| File | Linux (bytes) | Windows (bytes) |
+|------|---------------|-----------------|
+| Program: release template with the pack embedded | 73,569,648 | 109,318,720 |
+| Extension library (release) | 2,485,512 | 1,865,216 |
+| `THIRD-PARTY-NOTICES.txt` | 545,840 | 545,840 |
+| `README.txt` | 1,507 | 1,507 |
+| **Zip sent to a volunteer** | **29,204,733** (27.9 MiB) | **38,586,713** (36.8 MiB) |
+
+Unzipped, a build takes about 77 MB (Linux) or 112 MB (Windows).
 
 ## Raw input path
 
@@ -444,15 +526,17 @@ With accelerated input, the fast pass sums higher and fractional deltas appear.
 | `scripts/scenario.gd` | Seeded scenario generation and the fixed recoil pattern |
 | `scripts/recorder.gd` | In-memory log of the session's telemetry records (tests), and a telemetry file reader |
 | `scripts/telemetry_out.gd` | Forwards records to the extension's file writer or server client |
-| `scripts/dev_overlay.gd` | Developer overlay (debug builds only) |
+| `scripts/dev_overlay.gd` | Developer overlay (debug builds only; never in study builds) |
 | `scenes/study.tscn`, `scripts/study.gd` | Human-study build: consent, baseline, blind A/B comparisons, export |
 | `study/` | Study protocol (`protocol.json`) and consent text (`consent_v1.txt`) |
 | `scripts/scripted_bot.gd` | Scripted synthetic player for headless runs |
 | `scripts/probe_hooks.gd` | Installs the extension's drift multipliers on the two aim hooks |
 | `rearguard.gdextension` | Loads the Rust extension (`crates/rearguard-godot`) from `../target/` |
 | `scripts/*_test.gd` | Tests, one file beside each script; `probe_binding_test.gd` checks the extension, `live_loop_test.gd` runs against a real server (`target/debug/rearguard-server`) |
-| `tests/` | Test runner and base class; `probe_golden.json` holds the core golden vectors the extension must reproduce |
+| `tests/` | Test runner and base class; `probe_golden.json` holds the core golden vectors the extension must reproduce; `study_export_check.gd` holds the study export checks |
 | `tools/summarize_recording.gd` | Input statistics for recordings |
+| `tools/check_study_export.gd` | Checks an export from a study build (smoke test, or a participant's zip with `--human`) |
+| `tools/godot_notices.gd` | Writes the engine's licence notices for study builds |
 
 The bot is an ordinary aiming controller with a reaction delay and seeded noise.
 It reads only this range's own state, and its events go through

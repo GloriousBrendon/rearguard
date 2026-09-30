@@ -16,16 +16,28 @@
 ## extension. The export carries only labels, never seed material. Screens never show a
 ## session's condition or amplitude, and the developer overlay is off.
 ##
+## An exported study build (task 1.9a, scripts/export-study.sh) packs its release's key
+## as res://study/study-key.hex and its release label as res://study/release.txt; neither
+## file is in the repository.
+##
 ## Options after `--`:
-##   --study-key PATH (default user://study/study-key.hex)
+##   --study-key PATH (default: the packed key if there is one, else user://study/study-key.hex)
 ##   --protocol PATH (default res://study/protocol.json)
 ##   --export-dir DIR (default user://exports)
+##   --smoke-decline (build checks only: show the consent screen, print its SHA-256 and
+##     what the build packs, then press "I do not agree" and "Quit". It can only decline)
+##   --self-test (build checks only: no participant. The scripted bot plays and answers
+##     from a seeded RNG, and the export is marked "automated": true, so it can never be
+##     mistaken for a person's data. tools/check_study_export.gd checks the export)
 extends Node
 
 const AimRange := preload("res://scripts/aim_range.gd")
 const SCENE := preload("res://scenes/aim_range.tscn")
 const CONSENT_PATH := "res://study/consent_v1.txt"
 const CONSENT_VERSION := "v1"
+## Packed into exported study builds only (scripts/export-study.sh).
+const PACKED_KEY_PATH := "res://study/study-key.hex"
+const RELEASE_PATH := "res://study/release.txt"
 const EXPORT_FORMAT := "rearguard.study.export"
 const EXPORT_VERSION := 1
 ## 32 symbols without 0/O and 1/I, easy to read out; 32 divides 256, so each byte
@@ -39,6 +51,8 @@ signal _chosen(value: String)
 ## Run options. Set before the node enters the tree to skip command-line parsing.
 var config: Dictionary = {}
 var participant_id := ""
+## The build's release label ("dev" when run from the repository).
+var release := "dev"
 var seed_text := ""
 var plan: Dictionary = {}
 var export_path := ""
@@ -58,9 +72,12 @@ var _answer_rng := RandomNumberGenerator.new()
 
 static func default_config() -> Dictionary:
 	return {
-		"study_key": "user://study/study-key.hex",
+		"study_key": PACKED_KEY_PATH if FileAccess.file_exists(PACKED_KEY_PATH) else "user://study/study-key.hex",
 		"protocol": "res://study/protocol.json",
 		"export_dir": "user://exports",
+		"smoke_decline": false,
+		# --self-test: quit once the export is written.
+		"quit_when_done": false,
 		# Tests only: accept consent, let the scripted bot play, answer from a seeded RNG,
 		# and fix the participant ID and randomisation seed.
 		"auto": false,
@@ -79,6 +96,8 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 			"--study-key": c.study_key = value; i += 1
 			"--protocol": c.protocol = value; i += 1
 			"--export-dir": c.export_dir = value; i += 1
+			"--smoke-decline": c.smoke_decline = true
+			"--self-test": c.auto = true; c.quit_when_done = true
 			_: push_warning("study: unknown option %s" % args[i])
 		i += 1
 	return c
@@ -88,10 +107,12 @@ func _ready() -> void:
 	if config.is_empty():
 		config = parse_args(OS.get_cmdline_user_args())
 	_build_ui()
+	if FileAccess.file_exists(RELEASE_PATH):
+		release = FileAccess.get_file_as_string(RELEASE_PATH).strip_edges()
 	if not ClassDB.class_exists("RearguardStudy"):
 		_show("The study cannot start: the Rearguard extension is not built.\n\nFacilitator: run `cargo build -p rearguard-godot` from the repository root.", [["Quit", _quit]])
 		return
-	if not FileAccess.file_exists(ProjectSettings.globalize_path(config.study_key)):
+	if not FileAccess.file_exists(_key_path()):
 		_show("The study cannot start: the study key file is missing.\n\nFacilitator: place it at\n%s\n(see the facilitator instructions)." % ProjectSettings.globalize_path(config.study_key), [["Quit", _quit]])
 		return
 	_protocol_text = FileAccess.get_file_as_string(config.protocol)
@@ -102,6 +123,36 @@ func _ready() -> void:
 		accept_consent.call_deferred()
 	else:
 		_show(FileAccess.get_file_as_string(CONSENT_PATH), [["I agree", accept_consent], ["I do not agree", decline_consent]])
+		if config.smoke_decline:
+			_smoke_decline.call_deferred()
+
+
+## The study key as a path the extension reads: res:// stays as it is (it may be inside
+## the build's pack), anything else becomes a file-system path.
+func _key_path() -> String:
+	var path: String = config.study_key
+	return path if path.begins_with("res://") else ProjectSettings.globalize_path(path)
+
+
+## Build checks (--smoke-decline): proves the consent screen appears with its text
+## unchanged, then declines through the same buttons a participant presses.
+func _smoke_decline() -> void:
+	print("study: smoke: consent sha256 %s" % _text.text.sha256_text())
+	print("study: smoke: release %s, debug build %s" % [release, OS.is_debug_build()])
+	print("study: smoke: packed: key %s, dev overlay %s, tests %s, tools %s" % [
+			FileAccess.file_exists(PACKED_KEY_PATH), ResourceLoader.exists("res://scripts/dev_overlay.gd"),
+			DirAccess.dir_exists_absolute("res://tests"), DirAccess.dir_exists_absolute("res://tools")])
+	_press("I do not agree")
+	_press("Quit")
+
+
+func _press(label: String) -> void:
+	for b: Button in _buttons.get_children():
+		if b.text == label and not b.is_queued_for_deletion():
+			b.pressed.emit()
+			return
+	push_error("study: smoke: no button %s" % label)
+	get_tree().quit(1)
 
 
 ## The participant declined: nothing has been recorded, nothing is kept.
@@ -162,6 +213,8 @@ func _run() -> void:
 	_show("Thank you, you are done.\n\nYour participant ID: %s\n\nYour data is in one file:\n%s\n\nPlease send this file to the study facilitator. It contains only the data described at the start." % [
 			participant_id, export_path], [["Show the file", func() -> void: OS.shell_open(export_path.get_base_dir())], ["Quit", _quit]])
 	finished.emit(export_path)
+	if config.quit_when_done:
+		get_tree().quit(0 if not export_path.is_empty() else 1)
 
 
 ## Plays one session and returns what the manifest needs.
@@ -176,7 +229,7 @@ func _play(s: Dictionary, title: String) -> Dictionary:
 		"duration": float(s.duration_s),
 		"out": _work_dir.path_join(label + ".jsonl"),
 		"probe": true,
-		"probe_study_key": config.study_key,
+		"probe_study_key": _key_path(),
 		"probe_match_id": ClassDB.class_call_static("RearguardStudy", "match_id", plan.study_id, participant_id, label),
 		"probe_amplitude_ppm": int(s.amplitude_ppm),
 		"overlay": false,
@@ -228,6 +281,8 @@ func manifest_text() -> String:
 		"protocol_version": int(plan.protocol_version),
 		"protocol": "@protocol@",
 		"consent_version": CONSENT_VERSION,
+		"release": release,
+		"automated": bool(config.auto),
 		"participant_id": participant_id,
 		"randomisation_seed": seed_text,
 		"plan": "@plan@",

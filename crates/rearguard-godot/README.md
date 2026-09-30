@@ -32,6 +32,7 @@ epoch covering the whole session.
 | `start_session(epoch_seed: PackedByteArray, amplitude_ppm, probe_start_us)` | `Error` | From 32 seed bytes, as a server would deliver them. The caller's array cannot be wiped from Rust, so prefer the next two |
 | `start_session_from_file(path, create_if_missing, amplitude_ppm, probe_start_us)` | `Error` | From a file of 64 hex digits. With `create_if_missing`, a missing file is created with a fresh seed from the OS CSPRNG (owner-only on Unix). The seed never passes through GDScript |
 | `start_session_random(amplitude_ppm, probe_start_us)` | `Error` | A random seed held only in memory. The drift is applied but can never be analysed afterwards |
+| `start_session_derived(key_path, match_id, player_id, amplitude_ppm, probe_start_us)` | `Error` | From a root key file (a study key) through the probe key hierarchy. `key_path` is a file-system path, or a `res://` path for a key packed into an exported study build, which Rust reads through Godot's `FileAccess` and wipes after parsing |
 | `sensitivity_multiplier(ts_us)` | `float` | Multiplier for the view change of a raw delta at client timestamp `ts_us`; 1.0 without a session |
 | `recoil_scale(ts_us)` | `float` | Multiplier for the recoil kick of a shot at `ts_us`; 1.0 without a session |
 | `drift_ppb(stream, tick)`, `multiplier_at_tick(stream, tick)` | `int`, `float` | By probe tick (`STREAM_SENSITIVITY` = 0, `STREAM_RECOIL` = 1), for tests |

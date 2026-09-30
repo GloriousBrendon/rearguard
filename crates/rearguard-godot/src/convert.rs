@@ -132,15 +132,23 @@ pub(crate) fn load_or_create_seed(
 /// Loads a root key (for example a study key) from a file of 64 hex digits. The file's
 /// text is wiped from memory after parsing.
 pub(crate) fn load_root(path: &str) -> Result<rearguard_core::probe::RootSeed, SeedError> {
-    match fs::read_to_string(path) {
-        Ok(mut text) => {
-            let root = rearguard_core::probe::RootSeed::from_hex(&text);
-            text.zeroize();
-            root.ok_or(SeedError::Invalid)
-        }
+    match fs::read(path) {
+        Ok(mut bytes) => root_from_bytes(&mut bytes),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Err(SeedError::NotFound),
         Err(_) => Err(SeedError::Io),
     }
+}
+
+/// Parses a root key from a key file's contents (64 hex digits, surrounding whitespace
+/// ignored), then wipes the contents.
+pub(crate) fn root_from_bytes(
+    bytes: &mut [u8],
+) -> Result<rearguard_core::probe::RootSeed, SeedError> {
+    let root = std::str::from_utf8(bytes)
+        .ok()
+        .and_then(rearguard_core::probe::RootSeed::from_hex);
+    bytes.zeroize();
+    root.ok_or(SeedError::Invalid)
 }
 
 /// A non-negative GDScript integer as `u64`.
@@ -406,6 +414,33 @@ mod tests {
         fs::write(&path, "nope").unwrap();
         assert_eq!(
             load_root(&path.to_string_lossy()).err(),
+            Some(SeedError::Invalid)
+        );
+    }
+
+    #[test]
+    fn root_keys_parse_from_bytes_which_are_then_wiped() {
+        let mut bytes = format!("{HEX}\n").into_bytes();
+        let root = root_from_bytes(&mut bytes).unwrap();
+        assert!(bytes.iter().all(|&b| b == 0), "contents wiped");
+        let expected = rearguard_core::probe::RootSeed::from_hex(HEX).unwrap();
+        assert_eq!(
+            root.match_key(b"m")
+                .player_key(0)
+                .epoch_seed(0)
+                .expose_secret(),
+            expected
+                .match_key(b"m")
+                .player_key(0)
+                .epoch_seed(0)
+                .expose_secret()
+        );
+        let mut bad = b"not a key".to_vec();
+        assert_eq!(root_from_bytes(&mut bad).err(), Some(SeedError::Invalid));
+        assert!(bad.iter().all(|&b| b == 0), "invalid contents wiped too");
+        let mut not_utf8 = vec![0xff; 64];
+        assert_eq!(
+            root_from_bytes(&mut not_utf8).err(),
             Some(SeedError::Invalid)
         );
     }
