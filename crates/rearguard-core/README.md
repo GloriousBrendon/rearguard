@@ -15,6 +15,9 @@ engine crate, directly or transitively. `unsafe` code is forbidden.
   of signal shape.
 - `secret`: `SecretKey`, which is redacted in `Debug`/`Display` and zeroized on drop.
 - `telemetry`: the versioned client telemetry schema (decision D2), as JSON Lines.
+- `protocol`: the client–server wire protocol. Frames are a length prefix, a version
+  byte and a postcard message. It covers session seeds, telemetry chunks with replay
+  numbers, resume and verdicts; `rearguard-server` speaks it.
 - `detect`: the server-side input-probe detector. It streams one player's telemetry,
   replays it with and without the drift, and scores two statistics as signed
   log-likelihood ratios with confidences, per window and per session:

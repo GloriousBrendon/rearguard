@@ -46,6 +46,12 @@ impl RootSeed {
         Self(SecretKey::from_bytes(bytes))
     }
 
+    /// Reads a root seed written as 64 hexadecimal digits (a key file).
+    #[must_use]
+    pub fn from_hex(text: &str) -> Option<Self> {
+        SecretKey::from_hex(text).map(Self)
+    }
+
     /// The key for one match. `match_id` is any stable identifier, such as a UUID.
     #[must_use]
     pub fn match_key(&self, match_id: &[u8]) -> MatchKey {
@@ -89,6 +95,12 @@ impl EpochSeed {
     #[must_use]
     pub fn from_bytes(bytes: &mut [u8; SECRET_KEY_LEN]) -> Self {
         Self(SecretKey::from_bytes(bytes))
+    }
+
+    /// Reads an epoch seed written as 64 hexadecimal digits.
+    #[must_use]
+    pub fn from_hex(text: &str) -> Option<Self> {
+        SecretKey::from_hex(text).map(Self)
     }
 
     /// The raw seed, only for delivering it to the client it belongs to. Never log it.

@@ -1,6 +1,6 @@
 //! Player classes and running one simulated session.
 
-use rearguard_core::probe::{Amplitude, ProbeConfig, ProbeGenerator, RootSeed};
+use rearguard_core::probe::{Amplitude, EpochSeed, ProbeConfig, ProbeGenerator, RootSeed};
 use rearguard_core::telemetry::Record;
 
 use crate::aimbot::{
@@ -178,7 +178,45 @@ pub fn run_session(seed: &SimSeed, root: &RootSeed, spec: SessionSpec) -> Sessio
     let match_id = format!("sim-{:016x}", ids.next_u64());
     let player_id = ids.next_u64() >> 32;
     let scenario_seed = ids.next_u64();
+    let epoch = root
+        .match_key(match_id.as_bytes())
+        .player_key(player_id)
+        .epoch_seed(0);
+    simulate(seed, spec, match_id, player_id, scenario_seed, &epoch)
+}
 
+/// Simulates one session under a probe seed and identifiers issued elsewhere (for
+/// example by `rearguard-server`), as a real client would receive them. The player's
+/// behaviour, targets and noise still come from `seed` and `spec`.
+#[must_use]
+pub fn run_session_as(
+    seed: &SimSeed,
+    epoch: &EpochSeed,
+    match_id: &str,
+    player_id: u64,
+    spec: SessionSpec,
+) -> Session {
+    let mut ids = seed.rng(stream(&spec, Purpose::Ids));
+    let _ = (ids.next_u64(), ids.next_u64());
+    let scenario_seed = ids.next_u64();
+    simulate(
+        seed,
+        spec,
+        match_id.to_owned(),
+        player_id,
+        scenario_seed,
+        epoch,
+    )
+}
+
+fn simulate(
+    seed: &SimSeed,
+    spec: SessionSpec,
+    match_id: String,
+    player_id: u64,
+    scenario_seed: u64,
+    epoch: &EpochSeed,
+) -> Session {
     let mut params = seed.rng(stream(&spec, Purpose::Params));
     // Players choose their own sensitivity: 0.011 to 0.044 degrees per count.
     let deg_per_count = 0.022 * libm::exp2(params.range(-1.0, 1.0));
@@ -217,15 +255,11 @@ pub fn run_session(seed: &SimSeed, root: &RootSeed, spec: SessionSpec) -> Sessio
         ))),
     };
 
-    let epoch = root
-        .match_key(match_id.as_bytes())
-        .player_key(player_id)
-        .epoch_seed(0);
     let config = ProbeConfig {
         amplitude: spec.amplitude,
         ..ProbeConfig::default()
     };
-    let probe = ProbeGenerator::new(&epoch, &config).expect("default shape is valid");
+    let probe = ProbeGenerator::new(epoch, &config).expect("default shape is valid");
     let mut world = World::new(
         WorldConfig {
             scenario: spec.scenario,

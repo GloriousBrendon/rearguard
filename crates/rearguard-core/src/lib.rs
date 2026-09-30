@@ -6,6 +6,7 @@
 
 pub mod detect;
 pub mod probe;
+pub mod protocol;
 pub mod secret;
 pub mod telemetry;
 

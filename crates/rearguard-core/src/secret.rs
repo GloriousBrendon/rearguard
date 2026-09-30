@@ -28,6 +28,33 @@ impl SecretKey {
         key
     }
 
+    /// Reads a key written as 64 hexadecimal digits (surrounding whitespace ignored),
+    /// as in a key file. Returns `None` for anything else; no partial key is kept.
+    #[must_use]
+    pub fn from_hex(text: &str) -> Option<Self> {
+        let digits = text.trim().as_bytes();
+        if digits.len() != 2 * SECRET_KEY_LEN {
+            return None;
+        }
+        let nibble = |c: u8| match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            b'A'..=b'F' => Some(c - b'A' + 10),
+            _ => None,
+        };
+        let mut bytes = [0u8; SECRET_KEY_LEN];
+        for (i, pair) in digits.chunks_exact(2).enumerate() {
+            match (nibble(pair[0]), nibble(pair[1])) {
+                (Some(hi), Some(lo)) => bytes[i] = hi << 4 | lo,
+                _ => {
+                    bytes.zeroize();
+                    return None;
+                }
+            }
+        }
+        Some(Self::from_bytes(&mut bytes))
+    }
+
     /// The raw key bytes. Only for key derivation, or for sending a seed to a client
     /// where the protocol requires it. Never log or print the result.
     #[must_use]
@@ -72,6 +99,17 @@ mod tests {
         let key = SecretKey::from_bytes(&mut source);
         assert_eq!(source, [0; SECRET_KEY_LEN]);
         assert_eq!(key.expose_secret(), &[0xA7; SECRET_KEY_LEN]);
+    }
+
+    #[test]
+    fn from_hex_reads_64_digits_only() {
+        let hex = "00112233445566778899aabbccddeeff00112233445566778899AABBCCDDEEFF";
+        let key = SecretKey::from_hex(&format!(" {hex}\n")).unwrap();
+        assert_eq!(key.expose_secret()[1], 0x11);
+        assert_eq!(key.expose_secret()[31], 0xff);
+        for bad in ["", &hex[..62], &format!("{hex}0"), &hex.replace('a', "g")] {
+            assert!(SecretKey::from_hex(bad).is_none(), "{bad}");
+        }
     }
 
     #[test]

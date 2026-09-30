@@ -1,0 +1,25 @@
+{
+  "listen": "127.0.0.1:7461",
+  "master_secret_file": "server-master.hex",
+  "database": "rearguard.sqlite3",
+  "amplitude_ppm": 5000,
+  "detector": {
+    "kappa_bound": 2.0,
+    "error_flag_score": 11.25,
+    "steps_flag_score": 4.25,
+    "min_pairs": 20,
+    "window_ms": 30000,
+    "min_step_counts": 100.0
+  },
+  "limits": {
+    "max_frame_bytes": 262144,
+    "max_records_per_message": 4096,
+    "messages_per_second": 400.0,
+    "message_burst": 800.0,
+    "bytes_per_second": 4194304.0,
+    "byte_burst": 8388608.0,
+    "idle_timeout_ms": 30000,
+    "resume_timeout_ms": 60000,
+    "max_open_sessions": 1024
+  }
+}

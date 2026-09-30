@@ -65,7 +65,7 @@ The repository is private, on a personal GitHub account. Licence not chosen yet.
 |---------------------------|-----------------------------------------------------------------|--------|
 | `crates/rearguard-core`   | Probes, telemetry schema, detector (`detect`). Engine-agnostic. | Never  |
 | `crates/rearguard-sim`    | Closed test environment: synthetic players, test cheats, DR/FPR; `rearguard-sim` CLI. | Never  |
-| `crates/rearguard-server` | Holds seeds, ingests untrusted telemetry, judges reactions.     | Never  |
+| `crates/rearguard-server` | Issues seeds (derived, never stored), ingests telemetry over the `protocol` (loopback only), runs the detector, stores evidence in SQLite; see its README. | Never  |
 | `crates/rearguard-godot`  | Thin gdext binding over core: `RearguardProbe`, `RearguardRecorder` (GDExtension, see its README). | Only here |
 | `demo/`                   | Godot 4.7.2 aim range (GDScript, no addons); see `demo/README.md`. | n/a    |
 
@@ -125,6 +125,12 @@ checksum comes from the release's `SHA512-SUMS.txt`. The full steps are in
 | `chacha20` 0.10 (feature `rng`) | sim | MIT OR Apache-2.0 | Deterministic random streams for the simulator (already used by core) |
 | `libm` 0.2 | core, sim | MIT | Pure-Rust maths functions, so simulations and detector scores are bit-identical across platforms |
 | `zeroize` 1.9 | sim | Apache-2.0 OR MIT | Wipes the simulation seed on drop (already used by core) |
+| `postcard` 1.1 (feature `alloc`, no default features) | core | MIT OR Apache-2.0 | Binary encoding of wire-protocol messages |
+| `tokio` 1.53 (features `rt-multi-thread`, `net`, `io-util`, `time`, `sync`, `macros`, `signal`) | server | MIT | Async runtime and TCP |
+| `rusqlite` 0.40 (feature `bundled`) | server | MIT | Evidence store; `bundled` compiles SQLite (public domain) from source so Linux and Windows use the same version |
+| `getrandom` 0.3 | server | MIT OR Apache-2.0 | Master secrets, session ids and resume tokens from the OS CSPRNG |
+| `serde` 1 (feature `derive`), `serde_json` 1.0.151 (feature `float_roundtrip`) | server | MIT OR Apache-2.0 | Config file and `verdict` output (already used by core and sim) |
+| `zeroize` 1.9 | server | Apache-2.0 OR MIT | Wipes the master secret file's text (already used by core) |
 | `godot` (gdext) `=0.5.5` (feature `api-4-7`, no default features) | godot | **MPL-2.0 (exception, D10)** | The GDExtension binding. Pulls in `godot-*` 0.5.5 and `gdextension-api` 0.5.1, all MPL-2.0 and all listed in the `deny.toml` exception |
 | `getrandom` 0.3 | godot | MIT OR Apache-2.0 | OS CSPRNG for creating probe seed files, so seeds never pass through GDScript |
 | `zeroize` 1.9 | godot | Apache-2.0 OR MIT | Wipes seed text read from files (already used by core) |
