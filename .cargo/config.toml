@@ -1,0 +1,3 @@
+# `cargo xtask eval`: the one-command detector evaluation (task 1.12, crates/xtask).
+[alias]
+xtask = "run --release --locked --package xtask --"

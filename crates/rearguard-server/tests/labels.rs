@@ -41,7 +41,9 @@ fn offline_verdict(server: &TestServer, opened: &Opened, records: &[Record]) -> 
         amplitude: Amplitude::from_ppm(opened.amplitude_ppm).unwrap(),
         ..ProbeConfig::default()
     };
-    let mut detector = Detector::new(&opened.seed, &probe, config(&server.dir).detector).unwrap();
+    let detector_config = config(&server.dir).detector;
+    let detector_config = detector_config.for_scenario("flick").unwrap().clone();
+    let mut detector = Detector::new(&opened.seed, &probe, detector_config).unwrap();
     detector.feed(records).unwrap();
     let s = detector.session();
     let windows = detector.windows();

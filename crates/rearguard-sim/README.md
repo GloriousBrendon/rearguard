@@ -195,6 +195,11 @@ Limits of the two models:
 
 ## Evaluating the detector (task 1.3)
 
+> For detection and false-positive rates at per-scenario thresholds, with a held-out
+> false-positive measurement and test-bot and human sessions alongside, use
+> `cargo xtask eval` (task 1.12, `crates/xtask/README.md`). `rearguard-eval` below is the
+> task-1.3 and 1.3a evaluation, kept so those results can be reproduced.
+
 `rearguard-eval` streams simulated sessions through `rearguard_core::detect`, exactly as a
 server would (telemetry plus the player's epoch seed), and writes:
 - ROC data and plots;

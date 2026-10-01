@@ -1,0 +1,362 @@
+{
+  "about": "Rearguard detector evaluation (cargo xtask eval, task 1.12). A session is flagged when a statistic's session score is above its threshold; flag_score is the next number above the threshold, because the detector flags at score >= flag score. Each server_detector entry's detector object is a rearguard-server `detector` setting for that amplitude.",
+  "config": {
+    "amplitudes_ppm": [
+      2500,
+      5000,
+      10000,
+      20000
+    ],
+    "detector": {
+      "change_kappa_bound": 2.0,
+      "kappa_bound": 2.0,
+      "min_pairs": 20,
+      "min_step_counts": 100.0,
+      "spray_kappa_bound": 15.0,
+      "window_ms": 30000
+    },
+    "fpr_target": 0.001,
+    "horizon_s": 60.0,
+    "human_split": {
+      "calibration_fraction": 0.5,
+      "salt": "rearguard-eval-1.12"
+    },
+    "sim": {
+      "calibration_humans": 5000,
+      "cheats": 500,
+      "held_out_humans": 5000
+    }
+  },
+  "fpr_target": 0.001,
+  "git": "49b9ebf9ed9e056b23947e67897c88a74cfb715b",
+  "horizon_s": 60.0,
+  "inputs": {
+    "bots": null,
+    "humans": null,
+    "sim_seed": "given on the command line; never written out"
+  },
+  "server_detector": [
+    {
+      "amplitude_ppm": 2500,
+      "detector": {
+        "scenarios": {
+          "flick": {
+            "change": {
+              "flag_score": 10.35132332874943,
+              "kappa_bound": 2.0
+            },
+            "error_flag_score": 10.189753252069545,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "steps_flag_score": 4.732930084676293,
+            "window_ms": 30000
+          },
+          "spray": {
+            "error_flag_score": 6.948490896449295,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "spray": {
+              "flag_score": 15.140775115374748,
+              "kappa_bound": 15.0
+            },
+            "steps_flag_score": 1.7976931348623157e+308,
+            "window_ms": 30000
+          }
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 5000,
+      "detector": {
+        "scenarios": {
+          "flick": {
+            "change": {
+              "flag_score": 7.228176973864681,
+              "kappa_bound": 2.0
+            },
+            "error_flag_score": 11.871978952251316,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "steps_flag_score": 4.585530803036992,
+            "window_ms": 30000
+          },
+          "spray": {
+            "error_flag_score": 7.034173392993307,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "spray": {
+              "flag_score": 15.638248626320207,
+              "kappa_bound": 15.0
+            },
+            "steps_flag_score": 1.7976931348623157e+308,
+            "window_ms": 30000
+          }
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 10000,
+      "detector": {
+        "scenarios": {
+          "flick": {
+            "change": {
+              "flag_score": 7.276426375897859,
+              "kappa_bound": 2.0
+            },
+            "error_flag_score": 8.338746339659908,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "steps_flag_score": 4.787703262479021,
+            "window_ms": 30000
+          },
+          "spray": {
+            "error_flag_score": 6.663397152445044,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "spray": {
+              "flag_score": 15.349706681107962,
+              "kappa_bound": 15.0
+            },
+            "steps_flag_score": 1.7976931348623157e+308,
+            "window_ms": 30000
+          }
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 20000,
+      "detector": {
+        "scenarios": {
+          "flick": {
+            "change": {
+              "flag_score": 5.027627179529038,
+              "kappa_bound": 2.0
+            },
+            "error_flag_score": 7.1895738338246975,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "steps_flag_score": 4.1633632372980385,
+            "window_ms": 30000
+          },
+          "spray": {
+            "error_flag_score": 5.936056442838127,
+            "kappa_bound": 2.0,
+            "min_pairs": 20,
+            "min_step_counts": 100.0,
+            "spray": {
+              "flag_score": 15.141627679604005,
+              "kappa_bound": 15.0
+            },
+            "steps_flag_score": 1.7976931348623157e+308,
+            "window_ms": 30000
+          }
+        }
+      },
+      "threshold_set": "sim"
+    }
+  ],
+  "thresholds": [
+    {
+      "amplitude_ppm": 2500,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "flick",
+      "statistics": {
+        "change": {
+          "calibrated": true,
+          "flag_score": 10.35132332874943,
+          "threshold": 10.351323328749428
+        },
+        "error": {
+          "calibrated": true,
+          "flag_score": 10.189753252069545,
+          "threshold": 10.189753252069544
+        },
+        "steps": {
+          "calibrated": true,
+          "flag_score": 4.732930084676293,
+          "threshold": 4.732930084676292
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 2500,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "spray",
+      "statistics": {
+        "error": {
+          "calibrated": true,
+          "flag_score": 6.948490896449295,
+          "threshold": 6.948490896449294
+        },
+        "spray": {
+          "calibrated": true,
+          "flag_score": 15.140775115374748,
+          "threshold": 15.140775115374746
+        },
+        "steps": {
+          "calibrated": false,
+          "flag_score": 1.7976931348623157e+308,
+          "threshold": null
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 5000,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "flick",
+      "statistics": {
+        "change": {
+          "calibrated": true,
+          "flag_score": 7.228176973864681,
+          "threshold": 7.22817697386468
+        },
+        "error": {
+          "calibrated": true,
+          "flag_score": 11.871978952251316,
+          "threshold": 11.871978952251315
+        },
+        "steps": {
+          "calibrated": true,
+          "flag_score": 4.585530803036992,
+          "threshold": 4.585530803036991
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 5000,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "spray",
+      "statistics": {
+        "error": {
+          "calibrated": true,
+          "flag_score": 7.034173392993307,
+          "threshold": 7.034173392993306
+        },
+        "spray": {
+          "calibrated": true,
+          "flag_score": 15.638248626320207,
+          "threshold": 15.638248626320205
+        },
+        "steps": {
+          "calibrated": false,
+          "flag_score": 1.7976931348623157e+308,
+          "threshold": null
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 10000,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "flick",
+      "statistics": {
+        "change": {
+          "calibrated": true,
+          "flag_score": 7.276426375897859,
+          "threshold": 7.2764263758978585
+        },
+        "error": {
+          "calibrated": true,
+          "flag_score": 8.338746339659908,
+          "threshold": 8.338746339659906
+        },
+        "steps": {
+          "calibrated": true,
+          "flag_score": 4.787703262479021,
+          "threshold": 4.78770326247902
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 10000,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "spray",
+      "statistics": {
+        "error": {
+          "calibrated": true,
+          "flag_score": 6.663397152445044,
+          "threshold": 6.663397152445043
+        },
+        "spray": {
+          "calibrated": true,
+          "flag_score": 15.349706681107962,
+          "threshold": 15.34970668110796
+        },
+        "steps": {
+          "calibrated": false,
+          "flag_score": 1.7976931348623157e+308,
+          "threshold": null
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 20000,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "flick",
+      "statistics": {
+        "change": {
+          "calibrated": true,
+          "flag_score": 5.027627179529038,
+          "threshold": 5.027627179529037
+        },
+        "error": {
+          "calibrated": true,
+          "flag_score": 7.1895738338246975,
+          "threshold": 7.189573833824697
+        },
+        "steps": {
+          "calibrated": true,
+          "flag_score": 4.1633632372980385,
+          "threshold": 4.163363237298038
+        }
+      },
+      "threshold_set": "sim"
+    },
+    {
+      "amplitude_ppm": 20000,
+      "calibration_participants": 0,
+      "calibration_sessions": 5000,
+      "scenario": "spray",
+      "statistics": {
+        "error": {
+          "calibrated": true,
+          "flag_score": 5.936056442838127,
+          "threshold": 5.936056442838126
+        },
+        "spray": {
+          "calibrated": true,
+          "flag_score": 15.141627679604005,
+          "threshold": 15.141627679604003
+        },
+        "steps": {
+          "calibrated": false,
+          "flag_score": 1.7976931348623157e+308,
+          "threshold": null
+        }
+      },
+      "threshold_set": "sim"
+    }
+  ]
+}

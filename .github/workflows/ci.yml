@@ -77,7 +77,7 @@ jobs:
   godot:
     name: godot tests (linux)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       GODOT_VERSION: 4.7.2-stable
       # SHA-512 of Godot_v${GODOT_VERSION}_linux.x86_64.zip, from the release's SHA512-SUMS.txt.
@@ -134,6 +134,15 @@ jobs:
         env:
           REARGUARD_REQUIRE_EXTENSION: "1"
         run: timeout 600 ~/godot/godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
+      # The detector evaluation (task 1.12) on recordings the aim range's test bots just
+      # made: every recording must replay under the server's master secret (--strict).
+      - name: Record the test bots and evaluate them
+        run: |
+          timeout 300 scripts/record-test-bots.sh ~/godot/godot "$RUNNER_TEMP/bots" 10 1
+          cargo xtask eval --seed 1 --strict --config crates/xtask/eval/ci-bots.json \
+            --bots "$RUNNER_TEMP/bots/recordings" --bots-master-secret "$RUNNER_TEMP/bots/master.hex" \
+            --out "$RUNNER_TEMP/eval-bots"
+          cat "$RUNNER_TEMP/eval-bots/report.md"
 
   # The same headless GDScript suite on Windows (task 1.9a), then the release build of the
   # extension DLL for the study export. Git Bash, so the steps match the Linux job.
@@ -287,7 +296,17 @@ jobs:
           mkdir -p target/debug
           cp target/release/librearguard_godot.so target/debug/
           scripts/smoke-study-build.sh --build "$RUNNER_TEMP/build/linux" --godot ~/godot/godot \
-            --key "$RUNNER_TEMP/key/study-key.hex" --release "$STUDY_RELEASE"
+            --key "$RUNNER_TEMP/key/study-key.hex" --release "$STUDY_RELEASE" \
+            --keep-export "$RUNNER_TEMP/export"
+      # The detector evaluation (task 1.12) reads the export the build just wrote: the
+      # zip must open and its drifted baseline session must replay under the study key
+      # (--strict). An automated export, so the report is marked as not from people.
+      - name: Evaluate the self-test export
+        run: |
+          cargo xtask eval --seed 1 --strict --allow-test-exports --config crates/xtask/eval/ci-study.json \
+            --humans "$RUNNER_TEMP/export" --study-key "$RUNNER_TEMP/key/study-key.hex" \
+            --out "$RUNNER_TEMP/eval-study"
+          cat "$RUNNER_TEMP/eval-study/report.md"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: study-build-linux

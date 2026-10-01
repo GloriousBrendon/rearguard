@@ -6,7 +6,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use rearguard_core::detect::DetectorConfig;
+use rearguard_core::detect::DetectorSet;
 use rearguard_core::probe::Amplitude;
 use serde::Deserialize;
 
@@ -23,8 +23,10 @@ pub struct Config {
     pub database: PathBuf,
     /// Probe drift amplitude handed to clients, ppm.
     pub amplitude_ppm: u32,
-    /// Detector thresholds.
-    pub detector: DetectorConfig,
+    /// Detector thresholds: one set for every scenario, or one set per scenario
+    /// (`{"scenarios": {"flick": {...}, "spray": {...}}}`, task 1.12). With one set per
+    /// scenario, a session whose telemetry names a scenario without a set is refused.
+    pub detector: DetectorSet,
     /// Per-connection and server-wide limits.
     pub limits: Limits,
 }
@@ -67,7 +69,8 @@ impl Config {
         Ok(config)
     }
 
-    /// Checks ranges, and that the listen address is loopback.
+    /// Checks ranges, every detector configuration, and that the listen address is
+    /// loopback.
     ///
     /// # Errors
     /// A description of the first problem found.
@@ -79,6 +82,7 @@ impl Config {
             ));
         }
         Amplitude::from_ppm(self.amplitude_ppm).map_err(|e| e.to_string())?;
+        self.detector.validate().map_err(|e| e.to_string())?;
         let l = &self.limits;
         let positive = [
             l.messages_per_second,
@@ -136,5 +140,44 @@ pub(crate) mod tests {
         }
         let extra = example_json().replacen('{', "{\"surprise\": 1,", 1);
         assert!(Config::from_json(&extra).is_err(), "unknown field");
+    }
+
+    /// Task 1.12: one threshold set per scenario.
+    #[test]
+    fn the_detector_may_have_one_threshold_set_per_scenario() {
+        let single = Config::from_json(&example_json()).unwrap();
+        assert!(matches!(single.detector, DetectorSet::Single(_)));
+
+        let one = r#"{"kappa_bound": 2.0, "error_flag_score": @, "steps_flag_score": 4.25,
+            "min_pairs": 20, "window_ms": 30000, "min_step_counts": 100.0}"#;
+        let per_scenario = format!(
+            r#""detector": {{"scenarios": {{"flick": {}, "spray": {}}}}}, "limits""#,
+            one.replace('@', "11.25"),
+            one.replace('@', "6.5")
+        );
+        let text = example_json();
+        let start = text.find("\"detector\"").unwrap();
+        let end = text.find("\"limits\"").unwrap() + "\"limits\"".len();
+        let text = format!("{}{per_scenario}{}", &text[..start], &text[end..]);
+        let config = Config::from_json(&text).unwrap();
+        let score = |scenario: &str| {
+            config
+                .detector
+                .for_scenario(scenario)
+                .map(|c| c.error_flag_score)
+        };
+        assert_eq!(score("flick"), Some(11.25));
+        assert_eq!(score("spray"), Some(6.5));
+        assert_eq!(score("tracking"), None);
+
+        // Out-of-range thresholds are refused when the configuration is read, in either
+        // form, not when the first session arrives.
+        for bad in [
+            text.replace("\"min_pairs\": 20", "\"min_pairs\": 1"),
+            example_json().replace("\"window_ms\": 30000", "\"window_ms\": 0"),
+            text.replace("\"scenarios\": {", "\"scenarios\": {}, \"other\": {"),
+        ] {
+            assert!(Config::from_json(&bad).is_err(), "{bad}");
+        }
     }
 }

@@ -691,3 +691,40 @@ proptest! {
         prop_assert!(zs[3] > zs[0], "{zs:?}");
     }
 }
+
+#[test]
+fn a_detector_set_is_one_config_or_one_per_scenario() {
+    let one = r#"{"kappa_bound":2.0,"error_flag_score":12.0,"steps_flag_score":12.0,
+        "min_pairs":20,"window_ms":10000,"min_step_counts":4.0}"#;
+    let single: DetectorSet = serde_json::from_str(one).unwrap();
+    assert!(matches!(single, DetectorSet::Single(_)));
+    assert_eq!(
+        single.for_scenario("flick"),
+        single.for_scenario("anything")
+    );
+    assert!(single.validate().is_ok());
+
+    let spray = one.replace("12.0,\"steps", "7.5,\"steps");
+    let both = format!(r#"{{"scenarios":{{"flick":{one},"spray":{spray}}}}}"#);
+    let set: DetectorSet = serde_json::from_str(&both).unwrap();
+    assert!(set.validate().is_ok());
+    assert_eq!(set.for_scenario("flick").unwrap().error_flag_score, 12.0);
+    assert_eq!(set.for_scenario("spray").unwrap().error_flag_score, 7.5);
+    // No fallback: a scenario nobody set thresholds for has none.
+    assert!(set.for_scenario("tracking").is_none());
+
+    // Mistakes are reported, in either form.
+    for bad in [
+        r#"{"scenarios":{}, "extra":1}"#.to_owned(),
+        format!(r#"{{"scenarios":{{"flick":{one}}},"kappa_bound":2.0}}"#),
+        both.replace("\"min_pairs\":20", "\"min_pears\":20"),
+        one.replace("\"min_pairs\":20,", ""),
+    ] {
+        assert!(serde_json::from_str::<DetectorSet>(&bad).is_err(), "{bad}");
+    }
+    let empty: DetectorSet = serde_json::from_str(r#"{"scenarios":{}}"#).unwrap();
+    assert_eq!(empty.validate(), Err(DetectError::Config));
+    let out_of_range = both.replace("\"window_ms\":10000", "\"window_ms\":0");
+    let set: DetectorSet = serde_json::from_str(&out_of_range).unwrap();
+    assert_eq!(set.validate(), Err(DetectError::Config));
+}

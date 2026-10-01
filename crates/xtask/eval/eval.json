@@ -1,0 +1,22 @@
+{
+  "detector": {
+    "kappa_bound": 2.0,
+    "min_pairs": 20,
+    "window_ms": 30000,
+    "min_step_counts": 100.0,
+    "change_kappa_bound": 2.0,
+    "spray_kappa_bound": 15.0
+  },
+  "fpr_target": 0.001,
+  "horizon_s": 60.0,
+  "amplitudes_ppm": [2500, 5000, 10000, 20000],
+  "sim": {
+    "calibration_humans": 5000,
+    "held_out_humans": 5000,
+    "cheats": 500
+  },
+  "human_split": {
+    "calibration_fraction": 0.5,
+    "salt": "rearguard-eval-1.12"
+  }
+}

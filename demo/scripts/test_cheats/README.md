@@ -66,6 +66,11 @@ REARGUARD_TEST_ENV=1 godot --headless --path demo --fixed-fps 120 -- \
 
 Tests: `scripts/test_cheats_test.gd`, in the normal suite (`demo/README.md`).
 
+To record every bot for the detector evaluation (task 1.12), use
+`scripts/record-test-bots.sh`, then `cargo xtask eval --bots ...`
+(`crates/xtask/README.md`). The evaluation reads each run's label from its
+`.env.json`; the detector does not.
+
 ## Hardware injectors: equivalence unverified
 
 These bots inject input in software, inside the game process. Hardware injectors, such as

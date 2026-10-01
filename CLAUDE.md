@@ -41,9 +41,9 @@ The repository is private, on a personal GitHub account. Licensed MIT OR Apache-
 ## Constraints
 
 - Rust stable, toolchain pinned in `rust-toolchain.toml`.
-- Core crates (`rearguard-core`, `rearguard-sim`, `rearguard-server`) never depend
-  on Godot, directly or transitively. Only `rearguard-godot` may.
-- `#![forbid(unsafe_code)]` in core, sim and server.
+- Core crates (`rearguard-core`, `rearguard-sim`, `rearguard-server`) and `xtask` never
+  depend on Godot, directly or transitively. Only `rearguard-godot` may.
+- `#![forbid(unsafe_code)]` in core, sim, server and xtask.
 - No ring 0, no kernel drivers, no inspection of other processes, no obfuscation
   or anti-debug tricks. Behaviour identical on Linux and Windows.
 - Seeds and derived secrets are never logged, never printed via `Debug` or
@@ -55,6 +55,13 @@ The repository is private, on a personal GitHub account. Licensed MIT OR Apache-
   run without `REARGUARD_TEST_ENV=1` and a loopback or allowlisted server). Nothing
   aimed at live servers or other people's games. Ground-truth labels are session
   metadata for the evaluation harness only; the detector never reads them.
+- Evaluation (`cargo xtask eval`, task 1.12): thresholds are calibrated on one set of
+  sessions and false-positive rates measured on another. Human sessions are split by
+  participant, and the split is enforced by types (`xtask::split`): never calibrate on
+  an evaluation session, and never report a false-positive rate from calibration
+  sessions. Rates carry 95% Wilson intervals. Every result file records the git
+  revision, the configuration and digests of its inputs, and no seed, key, path or
+  participant id.
 - Add dependencies sparingly. **Every dependency addition (normal, dev or build)
   must pass `cargo deny --locked check` and be listed in the dependency table
   below with its licence.** Never weaken `deny.toml` to make a crate pass; a
@@ -82,10 +89,15 @@ The repository is private, on a personal GitHub account. Licensed MIT OR Apache-
 | `crates/rearguard-sim`    | Closed test environment: synthetic players, test cheats, DR/FPR; `rearguard-sim` CLI. | Never  |
 | `crates/rearguard-server` | Issues seeds (derived, never stored), ingests telemetry over the `protocol` (loopback only), runs the detector, stores evidence in SQLite; see its README. | Never  |
 | `crates/rearguard-godot`  | Thin gdext binding over core: `RearguardProbe`, `RearguardRecorder` (GDExtension, see its README). | Only here |
+| `crates/xtask`            | `cargo xtask eval`: simulated, test-bot and human sessions through the detector; DR and FPR together, per-scenario thresholds; see its README. | Never  |
 | `demo/`                   | Godot 4.7.2 aim range (GDScript, no addons) and the human-study scene; see `demo/README.md`. Study builds for volunteers: `scripts/export-study.sh`. | n/a    |
 
 Dependency direction: `sim`, `server` and `godot` depend on `core`; `core`
-depends on nothing in the workspace.
+depends on nothing in the workspace. `xtask` depends on `core` and `sim`.
+
+The server's `detector` setting is one threshold set for every scenario, or one per
+scenario (`rearguard_core::detect::DetectorSet`, task 1.12); the evaluation writes the
+per-scenario form.
 
 ## Commands (same as CI)
 
@@ -96,6 +108,12 @@ cargo test --workspace --locked
 cargo deny --locked check        # cargo install cargo-deny --locked (CI: 0.20.2)
 scripts/check-no-godot.sh
 scripts/check-spdx.sh
+```
+
+The detector evaluation (task 1.12; not part of CI's checks on the code, about a minute):
+
+```sh
+cargo xtask eval --seed N        # options and outputs: crates/xtask/README.md
 ```
 
 CI: `.github/workflows/ci.yml`, on every branch push (so pull requests show the
@@ -114,7 +132,10 @@ SHA-512 (`GODOT_ZIP_SHA512`) are pinned in the workflow, and the checksum is
 verified on every run, so a mismatch fails the job. The zip is cached, keyed on
 both values. After the import and before the tests, the job builds the Rust extension
 (`cargo build --locked -p rearguard-godot`) and sets `REARGUARD_REQUIRE_EXTENSION=1`,
-so the extension tests fail rather than skip if it does not load. Import comes first
+so the extension tests fail rather than skip if it does not load. The Linux job then
+records the aim range's test bots (`scripts/record-test-bots.sh`) and runs
+`cargo xtask eval --strict` on the recordings, so a recording that no longer replays
+fails the job. Import comes first
 because Godot 4.7.2 crashes on shutdown after a first import that loads a GDExtension
 (see `crates/rearguard-godot/README.md`). To run it locally,
 use the 4.7.2 binary as `godot`:
@@ -134,7 +155,9 @@ Study builds (task 1.9a): the `study build (export, linux smoke)` job exports th
 volunteers' Linux and Windows builds (`scripts/export-study.sh`) with the official
 4.7.2 release templates (SHA-512 checked every run), a fresh study key per run, and the
 release DLL from `godot tests (windows)`. It smoke-tests the Linux build
-(`scripts/smoke-study-build.sh`) and uploads the builds, sizes and key as artifacts.
+(`scripts/smoke-study-build.sh`), runs `cargo xtask eval --strict --allow-test-exports`
+on the export the smoke test wrote (so a change to the export format that the evaluation
+cannot read fails the job), and uploads the builds, sizes and key as artifacts.
 `study build (windows smoke)` smoke-tests the Windows build. The key is never committed
 and goes to the facilitator only (`docs/study/facilitator-instructions.md`).
 
@@ -163,6 +186,11 @@ and goes to the facilitator only (`docs/study/facilitator-instructions.md`).
 | `godot` (gdext) `=0.5.5` (feature `api-4-7`, no default features) | godot | **MPL-2.0 (exception, D10)** | The GDExtension binding. Pulls in `godot-*` 0.5.5 and `gdextension-api` 0.5.1, all MPL-2.0 and all listed in the `deny.toml` exception |
 | `getrandom` 0.3 | godot | MIT OR Apache-2.0 | OS CSPRNG for creating probe seed files, so seeds never pass through GDScript |
 | `zeroize` 1.9 | godot | Apache-2.0 OR MIT | Wipes seed text read from files (already used by core) |
+| `miniz_oxide` 0.9 (feature `with-alloc`, no default features) | xtask | MIT OR Zlib OR Apache-2.0 | Inflates the study export zips (task 1.12). Pulls in `adler2` (0BSD OR MIT OR Apache-2.0) |
+| `sha2` 0.11 | xtask | MIT OR Apache-2.0 | Participant split and input digests (already used by core) |
+| `serde` 1 (feature `derive`), `serde_json` 1.0.151 (feature `float_roundtrip`) | xtask | MIT OR Apache-2.0 | Evaluation config, export manifests, result files (already used by core) |
+| `libm` 0.2 | xtask | MIT | Platform-independent maths for intervals and plots (already used by core) |
+| `zeroize` 1.9 | xtask | Apache-2.0 OR MIT | Wipes key file text (already used by core) |
 
 Every row must match a crate in `Cargo.lock` that passed `cargo deny`. The table lists
 direct dependencies; `cargo deny` checks their transitive crates too, and every one

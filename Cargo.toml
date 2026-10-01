@@ -5,6 +5,7 @@ members = [
     "crates/rearguard-sim",
     "crates/rearguard-server",
     "crates/rearguard-godot",
+    "crates/xtask",
 ]
 
 [workspace.package]

@@ -1,0 +1,45 @@
+# Rearguard detector evaluation (cargo xtask eval, task 1.12). Lines starting with # are not data.
+# git: 49b9ebf9ed9e056b23947e67897c88a74cfb715b
+# config: {"detector":{"kappa_bound":2.0,"min_pairs":20,"window_ms":30000,"min_step_counts":100.0,"change_kappa_bound":2.0,"spray_kappa_bound":15.0},"fpr_target":0.001,"horizon_s":60.0,"amplitudes_ppm":[2500,5000,10000,20000],"sim":{"calibration_humans":5000,"held_out_humans":5000,"cheats":500},"human_split":{"calibration_fraction":0.5,"salt":"rearguard-eval-1.12"}}
+# inputs: {"bots":null,"humans":null,"sim_seed":"given on the command line; never written out"}
+threshold_set,amplitude_ppm,scenario,source,class,kind,sessions,flagged,rate,wilson95_low,wilson95_high,flagged_by_error,flagged_by_steps,flagged_by_change,flagged_by_spray
+sim,2500,flick,sim,human,calibration-check,5000,3,0.0006,,,1,1,1,
+sim,2500,flick,sim,human,false-positive,5000,4,0.0008,0.00031114697610156263,0.0020553266458434704,2,1,1,
+sim,2500,flick,sim,adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,500,0,500,
+sim,2500,flick,sim,fast-adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,249,0,500,
+sim,2500,flick,sim,flick-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,500,0,231,
+sim,2500,flick,sim,humanised-aimbot,detection,500,6,0.012,0.005510995174027703,0.025930361116447292,6,0,0,
+sim,2500,flick,sim,smoothing-aimbot,detection,500,165,0.33,0.2902178997291812,0.3723743760277467,143,28,2,
+sim,2500,spray,sim,human,calibration-check,5000,2,0.0004,,,1,0,,1
+sim,2500,spray,sim,human,false-positive,5000,3,0.0006,0.00020407465419434642,0.001762706048528709,2,0,,1
+sim,2500,spray,sim,recoil-macro,detection,500,67,0.134,0.10691500187152081,0.16666601534633546,1,0,,66
+sim,5000,flick,sim,human,calibration-check,5000,3,0.0006,,,1,1,1,
+sim,5000,flick,sim,human,false-positive,5000,6,0.0012,0.0005500831677591556,0.002615776292629832,0,2,4,
+sim,5000,flick,sim,adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,500,0,500,
+sim,5000,flick,sim,fast-adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,144,0,500,
+sim,5000,flick,sim,flick-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,500,0,329,
+sim,5000,flick,sim,humanised-aimbot,detection,500,56,0.112,0.08726280019410226,0.1426536880040623,52,0,8,
+sim,5000,flick,sim,smoothing-aimbot,detection,500,372,0.744,0.7039870300464813,0.7802922918082812,73,351,7,
+sim,5000,spray,sim,human,calibration-check,5000,2,0.0004,,,1,0,,1
+sim,5000,spray,sim,human,false-positive,5000,2,0.0004,0.00010970128207763504,0.0014573865014234437,2,0,,0
+sim,5000,spray,sim,recoil-macro,detection,500,77,0.154,0.1250106802783401,0.18826536332105404,1,0,,76
+sim,10000,flick,sim,human,calibration-check,5000,3,0.0006,,,1,1,1,
+sim,10000,flick,sim,human,false-positive,5000,1,0.0002,0.00003530578343936526,0.0011320890808397363,0,0,1,
+sim,10000,flick,sim,adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,497,0,500,
+sim,10000,flick,sim,fast-adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,95,0,500,
+sim,10000,flick,sim,flick-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,500,0,243,
+sim,10000,flick,sim,humanised-aimbot,detection,500,406,0.812,0.775422375686958,0.8438200358650336,406,0,21,
+sim,10000,flick,sim,smoothing-aimbot,detection,500,495,0.99,0.9768069002442693,0.9957212461034096,70,495,5,
+sim,10000,spray,sim,human,calibration-check,5000,2,0.0004,,,1,0,,1
+sim,10000,spray,sim,human,false-positive,5000,1,0.0002,0.00003530578343936526,0.0011320890808397363,1,0,,0
+sim,10000,spray,sim,recoil-macro,detection,500,188,0.376,0.3346400158192325,0.4192508206152326,25,0,,185
+sim,20000,flick,sim,human,calibration-check,5000,3,0.0006,,,1,1,1,
+sim,20000,flick,sim,human,false-positive,5000,4,0.0008,0.00031114697610156263,0.0020553266458434704,0,2,2,
+sim,20000,flick,sim,adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,340,0,500,
+sim,20000,flick,sim,fast-adaptive-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,51,0,500,
+sim,20000,flick,sim,flick-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,500,0,207,
+sim,20000,flick,sim,humanised-aimbot,detection,500,499,0.998,0.9887592932948532,0.9996468636054407,499,0,51,
+sim,20000,flick,sim,smoothing-aimbot,detection,500,500,1.0,0.9923756595384479,1.0,37,500,13,
+sim,20000,spray,sim,human,calibration-check,5000,2,0.0004,,,1,0,,1
+sim,20000,spray,sim,human,false-positive,5000,2,0.0004,0.00010970128207763504,0.0014573865014234437,1,0,,1
+sim,20000,spray,sim,recoil-macro,detection,500,417,0.834,0.7988646838026932,0.8640422567689898,163,0,,415

@@ -154,6 +154,14 @@ again and get a new ID.
    every session replays with the drift re-derived from the key.
 4. For a withdrawal request, delete the zip whose `participant_id` matches the ID quoted.
 
+## Analysing the exports
+
+`cargo xtask eval --seed N --humans FOLDER --study-key study-key.hex` runs every
+participant's baseline sessions through the detector (`crates/xtask/README.md`). Give the
+folder holding the zips, and the key of each release they came from. The results name no
+participant: they record counts and a digest of the exports. After a withdrawal, rerun
+the analysis without that participant's zip.
+
 ## What the export contains
 
 The export is one zip file with two parts:

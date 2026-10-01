@@ -66,7 +66,9 @@
 //! confidence `Φ(z)`. Evidence is kept per window of telemetry time and for the whole
 //! session, and updated as each chunk of records is fed in.
 
-use serde::Deserialize;
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer};
 
 use crate::probe::{EpochSeed, ProbeConfig, ProbeError, ProbeGenerator, Stream};
 use crate::telemetry::{self, Record};
@@ -127,6 +129,64 @@ impl DetectorConfig {
             && self.change.is_none_or(|t| t.valid())
             && self.spray.is_none_or(|t| t.valid());
         if ok { Ok(()) } else { Err(DetectError::Config) }
+    }
+}
+
+/// The detector configurations a server runs: one for every scenario, or one per
+/// scenario (task 1.12). Thresholds calibrated on flick play do not fit spray play, so
+/// a calibration gives a set per scenario.
+///
+/// In JSON, either a plain [`DetectorConfig`] object, or
+/// `{"scenarios": {"flick": {...}, "spray": {...}}}` with a [`DetectorConfig`] per
+/// scenario name (the telemetry header's `scenario`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum DetectorSet {
+    /// The same configuration for every scenario.
+    Single(DetectorConfig),
+    /// One configuration per scenario name. A scenario without one has none: there is
+    /// no fallback, so every threshold in use is one somebody chose.
+    PerScenario(BTreeMap<String, DetectorConfig>),
+}
+
+impl DetectorSet {
+    /// The configuration for a session of `scenario`, if there is one.
+    #[must_use]
+    pub fn for_scenario(&self, scenario: &str) -> Option<&DetectorConfig> {
+        match self {
+            Self::Single(config) => Some(config),
+            Self::PerScenario(configs) => configs.get(scenario),
+        }
+    }
+
+    /// Checks every configuration, as [`Detector::new`] would.
+    ///
+    /// # Errors
+    /// [`DetectError::Config`] if a configuration is out of range, or if there is none.
+    pub fn validate(&self) -> Result<(), DetectError> {
+        match self {
+            Self::Single(config) => config.validate(),
+            Self::PerScenario(configs) if configs.is_empty() => Err(DetectError::Config),
+            Self::PerScenario(configs) => configs.values().try_for_each(DetectorConfig::validate),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DetectorSet {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct PerScenario {
+            scenarios: BTreeMap<String, DetectorConfig>,
+        }
+        // Chosen by the presence of `scenarios`, so a mistake inside either form is
+        // reported as that form's error, not as "matches no variant".
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.get("scenarios").is_some() {
+            serde_json::from_value::<PerScenario>(value).map(|p| Self::PerScenario(p.scenarios))
+        } else {
+            serde_json::from_value(value).map(Self::Single)
+        }
+        .map_err(serde::de::Error::custom)
     }
 }
 

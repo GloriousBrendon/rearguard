@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use rearguard_core::detect::{Detector, Report};
-use rearguard_core::probe::{Amplitude, ProbeConfig, RootSeed};
+use rearguard_core::detect::{Detector, DetectorSet, Evidence, Report};
+use rearguard_core::probe::{Amplitude, EpochSeed, ProbeConfig, RootSeed};
 use rearguard_core::protocol::{
     ClientMessage, ErrorCode, EvidenceSummary, LENGTH_PREFIX, ProtocolError, ServerMessage,
     SessionStatus, SessionToken, VerdictReport, WireRecord, WireSeed, decode_payload, encode_frame,
@@ -46,11 +46,67 @@ fn random_id() -> io::Result<u64> {
     Ok(u64::from_le_bytes(b) >> 1)
 }
 
+/// A session's detector. With one configuration per scenario (task 1.12) it can only be
+/// built once the telemetry header has named the scenario.
+enum Detection {
+    /// No telemetry yet: what the detector will be built from.
+    Waiting {
+        seed: EpochSeed,
+        probe: ProbeConfig,
+    },
+    Running(Box<Detector>),
+}
+
+impl Detection {
+    /// Evidence for the whole session so far; none before the first telemetry.
+    fn session(&self) -> Report {
+        match self {
+            Self::Waiting { .. } => no_evidence(),
+            Self::Running(detector) => detector.session(),
+        }
+    }
+
+    /// Evidence for every completed window.
+    fn windows(&self) -> &[Report] {
+        match self {
+            Self::Waiting { .. } => &[],
+            Self::Running(detector) => detector.windows(),
+        }
+    }
+}
+
+/// The report of a session that has sent no telemetry: no pairs, neutral scores.
+fn no_evidence() -> Report {
+    let none = Evidence {
+        start_ms: 0,
+        end_ms: 0,
+        pairs: 0,
+        r: 0.0,
+        slope: 0.0,
+        slope_se: 0.0,
+        residual_sd: 0.0,
+        kappa: 0.0,
+        z: 0.0,
+        score: 0.0,
+        confidence: 0.5,
+        flagged: false,
+    };
+    Report {
+        error: none,
+        steps: none,
+        change: none,
+        spray: none,
+        shots: 0,
+        engagements: 0,
+        angle_mismatches: 0,
+    }
+}
+
 /// An open session held in memory.
 struct Live {
     match_id: String,
     token: SessionToken,
-    detector: Detector,
+    detector: Detection,
     next_seq: u64,
     records: u64,
     /// The connection holding the session, if any.
@@ -416,15 +472,37 @@ async fn handle(
                 }
                 let n = records.len() as u64;
                 let records: Vec<Record> = records.into_iter().map(Record::from).collect();
+                // The header names the scenario, which picks the detector configuration.
+                // The scenario is the client's claim, like the rest of the telemetry.
+                if let Detection::Waiting { seed, probe } = &live.detector {
+                    let Some(Record::Header(header)) = records.first() else {
+                        return error(ErrorCode::InvalidTelemetry);
+                    };
+                    let built = shared
+                        .config
+                        .detector
+                        .for_scenario(&header.scenario)
+                        .and_then(|config| Detector::new(seed, probe, config.clone()).ok());
+                    let Some(detector) = built else {
+                        shared.log.info(format_args!(
+                            "session {session_id}: no detector configuration for its scenario"
+                        ));
+                        return error(ErrorCode::InvalidTelemetry);
+                    };
+                    live.detector = Detection::Running(Box::new(detector));
+                }
+                let Detection::Running(detector) = &mut live.detector else {
+                    return error(ErrorCode::Internal);
+                };
                 // Records before a bad one are kept: the detector stops at the first
                 // invalid record.
-                let fed = live.detector.feed(&records);
+                let fed = detector.feed(&records);
                 live.records += n;
-                let done = live.detector.windows().len();
+                let done = detector.windows().len();
                 let pending = (done > live.persisted_windows).then(|| {
                     (
                         live.persisted_windows,
-                        live.detector.windows()[live.persisted_windows..].to_vec(),
+                        detector.windows()[live.persisted_windows..].to_vec(),
                     )
                 });
                 live.persisted_windows = done;
@@ -525,8 +603,21 @@ async fn hello(
         amplitude,
         ..ProbeConfig::default()
     };
-    let Ok(detector) = Detector::new(&seed, &probe, shared.config.detector.clone()) else {
-        return error(ErrorCode::Internal);
+    // One configuration for every scenario: the detector starts now. One per scenario:
+    // it starts when the telemetry header names the scenario.
+    let detector = match &shared.config.detector {
+        DetectorSet::Single(config) => match Detector::new(&seed, &probe, config.clone()) {
+            Ok(detector) => Detection::Running(Box::new(detector)),
+            Err(_) => return error(ErrorCode::Internal),
+        },
+        DetectorSet::PerScenario(_) => Detection::Waiting {
+            seed: shared
+                .root
+                .match_key(match_id.as_bytes())
+                .player_key(PLAYER_ID)
+                .epoch_seed(0),
+            probe,
+        },
     };
     let client: String = client.chars().take(64).collect();
     // The ground-truth label goes to the store for the evaluation harness, and nowhere

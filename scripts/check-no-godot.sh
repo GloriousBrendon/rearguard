@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT OR Apache-2.0
-# Fails if rearguard-core, -sim or -server reach any Godot binding crate, directly or
+# Fails if rearguard-core, -sim, -server or xtask reach any Godot binding crate, directly or
 # transitively, as a normal, build or dev dependency, on any target, with any features.
 # Only rearguard-godot may depend on Godot. Run from the workspace root.
 set -euo pipefail
 
-crates=(rearguard-core rearguard-sim rearguard-server)
+crates=(rearguard-core rearguard-sim rearguard-server xtask)
 # gdext (godot, godot-*), GDExtension API crates, Godot 3 gdnative, and our own binding.
 pattern='^(godot|godot-[A-Za-z0-9_-]+|gdext[A-Za-z0-9_-]*|gdextension[A-Za-z0-9_-]*|gdnative[A-Za-z0-9_-]*|rearguard-godot) v'
 

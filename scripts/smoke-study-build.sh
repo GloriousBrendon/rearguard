@@ -10,6 +10,8 @@
 #                    imported and the Rust extension loadable by the editor
 #   --key KEY.hex    the facilitator's copy of the release's study key
 #   --release LABEL  the release label the build was exported with
+#   --keep-export DIR  (optional) copy the self-test export there, for the detector
+#                    evaluation's check of the export format (cargo xtask eval)
 #
 # Every run of the build gets fresh, empty user folders (HOME and XDG_* on Linux, APPDATA
 # and LOCALAPPDATA on Windows) in a temporary sandbox.
@@ -42,13 +44,14 @@ USAGE
   exit 2
 }
 
-build="" godot="" key="" release=""
+build="" godot="" key="" release="" keep=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) build="$2"; shift 2 ;;
     --godot) godot="$2"; shift 2 ;;
     --key) key="$2"; shift 2 ;;
     --release) release="$2"; shift 2 ;;
+    --keep-export) keep="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -139,6 +142,7 @@ if [ -z "$zip" ]; then
   bad "self-test wrote no export"
 else
   ok "self-test export $(basename "$zip") ($(wc -c < "$zip" | tr -d ' ') bytes)"
+  if [ -n "$keep" ]; then mkdir -p "$keep" && cp "$zip" "$keep/"; fi
   # The checker runs with the same user folders as the build, so its forbidden strings
   # (home, user data folder) are the ones the build saw; the real home and the build
   # folder are added.

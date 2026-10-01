@@ -36,7 +36,7 @@ defaults, so every threshold and limit is a deliberate choice. See
 | `master_secret_file` | 64 hex digits, from `gen-secret` (owner-only permissions on Unix) |
 | `database` | SQLite file, created if missing |
 | `amplitude_ppm` | Drift amplitude handed to clients, 0 to 20000 |
-| `detector` | `rearguard_core::detect::DetectorConfig`: κ bound, flag scores, window length, and so on |
+| `detector` | Detector thresholds. Either one `rearguard_core::detect::DetectorConfig` (κ bound, flag scores, window length, and so on) for every scenario, or one per scenario: `{"scenarios": {"flick": {...}, "spray": {...}}}` (below) |
 | `limits.max_frame_bytes` | Largest frame payload; a longer prefix closes the connection before anything is read |
 | `limits.max_records_per_message` | Most telemetry records in one message |
 | `limits.messages_per_second` / `message_burst` | Per-connection message token bucket |
@@ -53,6 +53,34 @@ The example config's detector thresholds are the task-1.3 sequential calibration
   only.
 
 These must be recalibrated on real players (task 1.10).
+
+### One threshold set per scenario (task 1.12)
+
+Thresholds calibrated on flick play do not fit spray play, so `detector` may hold one
+set per scenario, keyed by the telemetry header's `scenario`:
+
+```json
+"detector": {
+  "scenarios": {
+    "flick": { "kappa_bound": 2.0, "error_flag_score": 8.4, "steps_flag_score": 4.5,
+               "min_pairs": 20, "window_ms": 30000, "min_step_counts": 100.0,
+               "change": { "kappa_bound": 2.0, "flag_score": 8.2 } },
+    "spray": { "kappa_bound": 2.0, "error_flag_score": 6.9, "steps_flag_score": 1e300,
+               "min_pairs": 20, "window_ms": 30000, "min_step_counts": 100.0,
+               "spray": { "kappa_bound": 15.0, "flag_score": 15.2 } }
+  }
+}
+```
+
+- `cargo xtask eval` writes calibrated sets in this form (`thresholds.json`,
+  `server_detector`; see `crates/xtask/README.md`). The numbers above only show the shape.
+- The detector starts when a session's first telemetry arrives, because the header names
+  the scenario. Until then a verdict shows no evidence.
+- There is no fallback. A session whose header names a scenario without a set, or whose
+  telemetry does not start with a header, gets `InvalidTelemetry`.
+- The scenario is the client's claim, like the rest of the telemetry. A real game's
+  server knows the mode being played and should not take it from the client.
+- Every configuration is checked when the config file is read, in either form.
 
 ## Seeds and secrets
 
@@ -140,5 +168,6 @@ step-response evidence in detail.
 | `tests/end_to_end.rs` | Acceptance criteria 1 and 5. Simulated clients (`rearguard-sim` flick, smoothing and human players, playing under server-issued seeds) through the server to verdicts, via `Finish`, the `Verdict` API and the database. Checks that seeds re-derive from the master secret |
 | `tests/robustness.rs` | Criterion 4, and criterion 2 at the socket: oversized, empty, malformed and wrong-version frames; random byte streams; replays and skips; invalid telemetry; rate limits; the session cap; disconnect and resume; abandonment after the resume timeout; half-open connections past the idle timeout; graceful shutdown; non-loopback refusal |
 | `tests/secrets.rs` | Criterion 3, as above |
+| `tests/scenarios.rs` | Task 1.12: with one threshold set per scenario, the header's scenario picks the set; a session has no evidence before its header; a scenario without a set and telemetry without a header are refused |
 | `tests/labels.rs` | Task 1.8: ground-truth labels are never read by the detector. A labelled session's verdict equals, bit for bit, what a label-free offline detector computes from the same telemetry; lying labels change nothing; `labels` lists them |
 | `rearguard-core` `protocol` tests | Criterion 2: property tests. Arbitrary bytes never panic, every message round-trips, corrupted and truncated payloads are handled, and length prefixes are checked before allocation |

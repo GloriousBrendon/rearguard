@@ -1,0 +1,441 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1002 372" width="1002" height="372" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="11">
+<metadata>{"git":"49b9ebf9ed9e056b23947e67897c88a74cfb715b","config":{"detector":{"kappa_bound":2.0,"min_pairs":20,"window_ms":30000,"min_step_counts":100.0,"change_kappa_bound":2.0,"spray_kappa_bound":15.0},"fpr_target":0.001,"horizon_s":60.0,"amplitudes_ppm":[2500,5000,10000,20000],"sim":{"calibration_humans":5000,"held_out_humans":5000,"cheats":500},"human_split":{"calibration_fraction":0.5,"salt":"rearguard-eval-1.12"}},"inputs":{"bots":null,"humans":null,"sim_seed":"given on the command line; never written out"}}</metadata>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; }
+  .grid { stroke: #e4e3df; stroke-width: 1; } .axis { stroke: #b9b8b3; stroke-width: 1; fill: none; }
+  .ref { stroke: #52514e; stroke-width: 1; stroke-dasharray: 3 3; }
+  .base { stroke: #b9b8b3; stroke-width: 1; fill: none; }
+  .s0 { stroke: #2a78d6; } .s1 { stroke: #eb6834; } .s2 { stroke: #1baf7a; }
+  .s3 { stroke: #eda100; } .s4 { stroke: #e87ba4; } .s5 { stroke: #008300; }
+  .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .dot { fill: #fcfcfb; stroke-width: 2; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #ffffff; } .t2 { fill: #c3c2b7; }
+    .grid { stroke: #33322f; } .axis { stroke: #5c5b57; } .ref { stroke: #c3c2b7; } .base { stroke: #5c5b57; }
+    .s0 { stroke: #3987e5; } .s1 { stroke: #d95926; } .s2 { stroke: #199e70; }
+    .s3 { stroke: #c98500; } .s4 { stroke: #d55181; } .s5 { stroke: #008300; }
+    .dot { fill: #1a1a19; }
+  }
+</style>
+<rect class="bg" x="0" y="0" width="1002" height="372"/>
+<text class="t1" x="76" y="24" font-size="15" font-weight="600">Detection rate against false-positive rate, 60 s sessions</text>
+<text class="t2" x="76" y="42">Rows: what the thresholds were calibrated on. Columns: drift amplitude.</text>
+<text class="t2" x="76" y="57">x: false-positive rate on held-out humans (log scale; a rate of 0 sits on the left edge). y: detection rate.</text>
+<g transform="translate(76,92)">
+<line class="grid" x1="0" y1="0" x2="200" y2="0"/>
+<line class="grid" x1="0" y1="42.5" x2="200" y2="42.5"/>
+<line class="grid" x1="0" y1="85" x2="200" y2="85"/>
+<line class="grid" x1="0" y1="127.5" x2="200" y2="127.5"/>
+<line class="grid" x1="0" y1="170" x2="200" y2="170"/>
+<line class="grid" x1="0.0" y1="0" x2="0.0" y2="170"/>
+<line class="grid" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<line class="grid" x1="100.0" y1="0" x2="100.0" y2="170"/>
+<line class="grid" x1="150.0" y1="0" x2="150.0" y2="170"/>
+<line class="grid" x1="200.0" y1="0" x2="200.0" y2="170"/>
+<polyline class="base" points="0.0,170.0 5.0,170.0 10.0,170.0 15.0,170.0 20.0,170.0 25.0,169.9 30.0,169.9 35.0,169.9 40.0,169.9 45.0,169.9 50.0,169.8 55.0,169.8 60.0,169.7 65.0,169.7 70.0,169.6 75.0,169.5 80.0,169.3 85.0,169.1 90.0,168.9 95.0,168.6 100.0,168.3 105.0,167.9 110.0,167.3 115.0,166.6 120.0,165.7 125.0,164.6 130.0,163.2 135.0,161.5 140.0,159.3 145.0,156.5 150.0,153.0 155.0,148.6 160.0,143.1 165.0,136.1 170.0,127.3 175.0,116.2 180.0,102.3 185.0,84.8 190.0,62.7 195.0,35.0 200.0,0.0"/>
+<line class="ref" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<rect class="axis" x="0" y="0" width="200" height="170"/>
+<polyline class="line s0" points="30.1,0.0 45.2,0.0 77.8,0.0 91.6,0.0 106.7,0.0 114.8,0.0 134.0,0.0 147.5,0.0 161.2,0.0 179.0,0.0"><title>flick-aimbot</title></polyline>
+<circle class="dot s0" cx="30.1" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 0.01%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="30.1" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 0.02%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="30.1" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 0.05%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="45.2" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 0.10%: FPR 4/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="77.8" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 0.20%: FPR 18/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="91.6" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 0.50%: FPR 34/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="106.7" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 1.0%: FPR 68/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="114.8" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 2.0%: FPR 99/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="134.0" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 5.0%: FPR 239/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="147.5" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 10.0%: FPR 445/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="161.2" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 20.0%: FPR 839/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="179.0" cy="0.0" r="3"><title>flick-aimbot, 0.25% amplitude, calibrated at 50.0%: FPR 1897/5000, detection 500/500</title></circle>
+<polyline class="line s1" stroke-dasharray="6 3" points="30.1,168.0 45.2,168.0 77.8,167.3 91.6,164.6 106.7,158.1 114.8,149.6 134.0,134.3 147.5,114.6 161.2,89.4 179.0,54.1"><title>humanised-aimbot</title></polyline>
+<circle class="dot s1" cx="30.1" cy="168.0" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 0.01%: FPR 2/5000, detection 6/500</title></circle>
+<circle class="dot s1" cx="30.1" cy="168.0" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 0.02%: FPR 2/5000, detection 6/500</title></circle>
+<circle class="dot s1" cx="30.1" cy="168.0" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 0.05%: FPR 2/5000, detection 6/500</title></circle>
+<circle class="dot s1" cx="45.2" cy="168.0" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 0.10%: FPR 4/5000, detection 6/500</title></circle>
+<circle class="dot s1" cx="77.8" cy="167.3" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 0.20%: FPR 18/5000, detection 8/500</title></circle>
+<circle class="dot s1" cx="91.6" cy="164.6" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 0.50%: FPR 34/5000, detection 16/500</title></circle>
+<circle class="dot s1" cx="106.7" cy="158.1" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 1.0%: FPR 68/5000, detection 35/500</title></circle>
+<circle class="dot s1" cx="114.8" cy="149.6" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 2.0%: FPR 99/5000, detection 60/500</title></circle>
+<circle class="dot s1" cx="134.0" cy="134.3" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 5.0%: FPR 239/5000, detection 105/500</title></circle>
+<circle class="dot s1" cx="147.5" cy="114.6" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 10.0%: FPR 445/5000, detection 163/500</title></circle>
+<circle class="dot s1" cx="161.2" cy="89.4" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 20.0%: FPR 839/5000, detection 237/500</title></circle>
+<circle class="dot s1" cx="179.0" cy="54.1" r="3"><title>humanised-aimbot, 0.25% amplitude, calibrated at 50.0%: FPR 1897/5000, detection 341/500</title></circle>
+<polyline class="line s2" stroke-dasharray="2 3" points="30.1,0.0 45.2,0.0 77.8,0.0 91.6,0.0 106.7,0.0 114.8,0.0 134.0,0.0 147.5,0.0 161.2,0.0 179.0,0.0"><title>adaptive-aimbot</title></polyline>
+<circle class="dot s2" cx="30.1" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 0.01%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="30.1" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 0.02%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="30.1" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 0.05%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="45.2" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 0.10%: FPR 4/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="77.8" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 0.20%: FPR 18/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="91.6" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 0.50%: FPR 34/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="106.7" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 1.0%: FPR 68/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="114.8" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 2.0%: FPR 99/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="134.0" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 5.0%: FPR 239/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="147.5" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 10.0%: FPR 445/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="161.2" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 20.0%: FPR 839/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="179.0" cy="0.0" r="3"><title>adaptive-aimbot, 0.25% amplitude, calibrated at 50.0%: FPR 1897/5000, detection 500/500</title></circle>
+<polyline class="line s3" stroke-dasharray="9 3 2 3" points="30.1,0.0 45.2,0.0 77.8,0.0 91.6,0.0 106.7,0.0 114.8,0.0 134.0,0.0 147.5,0.0 161.2,0.0 179.0,0.0"><title>fast-adaptive-aimbot</title></polyline>
+<circle class="dot s3" cx="30.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 0.01%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="30.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 0.02%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="30.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 0.05%: FPR 2/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="45.2" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 0.10%: FPR 4/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="77.8" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 0.20%: FPR 18/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="91.6" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 0.50%: FPR 34/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="106.7" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 1.0%: FPR 68/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="114.8" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 2.0%: FPR 99/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="134.0" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 5.0%: FPR 239/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="147.5" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 10.0%: FPR 445/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="161.2" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 20.0%: FPR 839/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="179.0" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.25% amplitude, calibrated at 50.0%: FPR 1897/5000, detection 500/500</title></circle>
+<polyline class="line s4" stroke-dasharray="1 3" points="30.1,121.0 45.2,113.9 77.8,103.0 91.6,73.4 106.7,59.8 114.8,40.5 134.0,18.7 147.5,5.1 161.2,2.0 179.0,0.3"><title>smoothing-aimbot</title></polyline>
+<circle class="dot s4" cx="30.1" cy="121.0" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 0.01%: FPR 2/5000, detection 144/500</title></circle>
+<circle class="dot s4" cx="30.1" cy="121.0" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 0.02%: FPR 2/5000, detection 144/500</title></circle>
+<circle class="dot s4" cx="30.1" cy="121.0" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 0.05%: FPR 2/5000, detection 144/500</title></circle>
+<circle class="dot s4" cx="45.2" cy="113.9" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 0.10%: FPR 4/5000, detection 165/500</title></circle>
+<circle class="dot s4" cx="77.8" cy="103.0" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 0.20%: FPR 18/5000, detection 197/500</title></circle>
+<circle class="dot s4" cx="91.6" cy="73.4" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 0.50%: FPR 34/5000, detection 284/500</title></circle>
+<circle class="dot s4" cx="106.7" cy="59.8" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 1.0%: FPR 68/5000, detection 324/500</title></circle>
+<circle class="dot s4" cx="114.8" cy="40.5" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 2.0%: FPR 99/5000, detection 381/500</title></circle>
+<circle class="dot s4" cx="134.0" cy="18.7" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 5.0%: FPR 239/5000, detection 445/500</title></circle>
+<circle class="dot s4" cx="147.5" cy="5.1" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 10.0%: FPR 445/5000, detection 485/500</title></circle>
+<circle class="dot s4" cx="161.2" cy="2.0" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 20.0%: FPR 839/5000, detection 494/500</title></circle>
+<circle class="dot s4" cx="179.0" cy="0.3" r="3"><title>smoothing-aimbot, 0.25% amplitude, calibrated at 50.0%: FPR 1897/5000, detection 499/500</title></circle>
+<polyline class="line s5" stroke-dasharray="12 4" points="38.9,147.2 60.2,145.5 81.2,140.4 93.5,136.7 106.0,133.6 125.4,123.4 141.8,114.6 154.4,98.9 173.3,66.0"><title>recoil-macro</title></polyline>
+<circle class="dot s5" cx="38.9" cy="147.2" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 0.01%: FPR 3/5000, detection 67/500</title></circle>
+<circle class="dot s5" cx="38.9" cy="147.2" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 0.02%: FPR 3/5000, detection 67/500</title></circle>
+<circle class="dot s5" cx="38.9" cy="147.2" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 0.05%: FPR 3/5000, detection 67/500</title></circle>
+<circle class="dot s5" cx="38.9" cy="147.2" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 0.10%: FPR 3/5000, detection 67/500</title></circle>
+<circle class="dot s5" cx="60.2" cy="145.5" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 0.20%: FPR 8/5000, detection 72/500</title></circle>
+<circle class="dot s5" cx="81.2" cy="140.4" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 0.50%: FPR 21/5000, detection 87/500</title></circle>
+<circle class="dot s5" cx="93.5" cy="136.7" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 1.0%: FPR 37/5000, detection 98/500</title></circle>
+<circle class="dot s5" cx="106.0" cy="133.6" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 2.0%: FPR 66/5000, detection 107/500</title></circle>
+<circle class="dot s5" cx="125.4" cy="123.4" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 5.0%: FPR 161/5000, detection 137/500</title></circle>
+<circle class="dot s5" cx="141.8" cy="114.6" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 10.0%: FPR 343/5000, detection 163/500</title></circle>
+<circle class="dot s5" cx="154.4" cy="98.9" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 20.0%: FPR 612/5000, detection 209/500</title></circle>
+<circle class="dot s5" cx="173.3" cy="66.0" r="3"><title>recoil-macro, 0.25% amplitude, calibrated at 50.0%: FPR 1464/5000, detection 306/500</title></circle>
+<text class="t1" x="100" y="-10" text-anchor="middle" font-weight="600">0.25% amplitude</text>
+<text class="t1" x="-50" y="85" text-anchor="middle" font-weight="600" transform="rotate(-90 -50 85)">thresholds: simulated humans</text>
+<text class="t2" x="-6" y="0" text-anchor="end" dominant-baseline="middle">100%</text>
+<text class="t2" x="-6" y="85" text-anchor="end" dominant-baseline="middle">50%</text>
+<text class="t2" x="-6" y="170" text-anchor="end" dominant-baseline="middle">0%</text>
+<text class="t2" x="0.0" y="184" text-anchor="middle">0.01%</text>
+<text class="t2" x="50.0" y="184" text-anchor="middle">0.1%</text>
+<text class="t2" x="100.0" y="184" text-anchor="middle">1%</text>
+<text class="t2" x="150.0" y="184" text-anchor="middle">10%</text>
+<text class="t2" x="200.0" y="184" text-anchor="middle">100%</text>
+</g>
+<g transform="translate(310,92)">
+<line class="grid" x1="0" y1="0" x2="200" y2="0"/>
+<line class="grid" x1="0" y1="42.5" x2="200" y2="42.5"/>
+<line class="grid" x1="0" y1="85" x2="200" y2="85"/>
+<line class="grid" x1="0" y1="127.5" x2="200" y2="127.5"/>
+<line class="grid" x1="0" y1="170" x2="200" y2="170"/>
+<line class="grid" x1="0.0" y1="0" x2="0.0" y2="170"/>
+<line class="grid" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<line class="grid" x1="100.0" y1="0" x2="100.0" y2="170"/>
+<line class="grid" x1="150.0" y1="0" x2="150.0" y2="170"/>
+<line class="grid" x1="200.0" y1="0" x2="200.0" y2="170"/>
+<polyline class="base" points="0.0,170.0 5.0,170.0 10.0,170.0 15.0,170.0 20.0,170.0 25.0,169.9 30.0,169.9 35.0,169.9 40.0,169.9 45.0,169.9 50.0,169.8 55.0,169.8 60.0,169.7 65.0,169.7 70.0,169.6 75.0,169.5 80.0,169.3 85.0,169.1 90.0,168.9 95.0,168.6 100.0,168.3 105.0,167.9 110.0,167.3 115.0,166.6 120.0,165.7 125.0,164.6 130.0,163.2 135.0,161.5 140.0,159.3 145.0,156.5 150.0,153.0 155.0,148.6 160.0,143.1 165.0,136.1 170.0,127.3 175.0,116.2 180.0,102.3 185.0,84.8 190.0,62.7 195.0,35.0 200.0,0.0"/>
+<line class="ref" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<rect class="axis" x="0" y="0" width="200" height="170"/>
+<polyline class="line s0" points="15.1,0.0 54.0,0.0 79.0,0.0 87.4,0.0 100.9,0.0 115.7,0.0 133.7,0.0 147.9,0.0 161.5,0.0 179.9,0.0"><title>flick-aimbot</title></polyline>
+<circle class="dot s0" cx="15.1" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 0.01%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="15.1" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 0.02%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="15.1" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 0.05%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="54.0" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 0.10%: FPR 6/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="79.0" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 0.20%: FPR 19/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="87.4" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 0.50%: FPR 28/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="100.9" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 1.0%: FPR 52/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="115.7" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 2.0%: FPR 103/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="133.7" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 5.0%: FPR 236/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="147.9" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 10.0%: FPR 453/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="161.5" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 20.0%: FPR 850/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="179.9" cy="0.0" r="3"><title>flick-aimbot, 0.5% amplitude, calibrated at 50.0%: FPR 1984/5000, detection 500/500</title></circle>
+<polyline class="line s1" stroke-dasharray="6 3" points="15.1,152.7 54.0,151.0 79.0,119.3 87.4,106.8 100.9,98.3 115.7,82.6 133.7,60.9 147.9,39.8 161.5,23.5 179.9,8.8"><title>humanised-aimbot</title></polyline>
+<circle class="dot s1" cx="15.1" cy="152.7" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 0.01%: FPR 1/5000, detection 51/500</title></circle>
+<circle class="dot s1" cx="15.1" cy="152.7" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 0.02%: FPR 1/5000, detection 51/500</title></circle>
+<circle class="dot s1" cx="15.1" cy="152.7" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 0.05%: FPR 1/5000, detection 51/500</title></circle>
+<circle class="dot s1" cx="54.0" cy="151.0" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 0.10%: FPR 6/5000, detection 56/500</title></circle>
+<circle class="dot s1" cx="79.0" cy="119.3" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 0.20%: FPR 19/5000, detection 149/500</title></circle>
+<circle class="dot s1" cx="87.4" cy="106.8" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 0.50%: FPR 28/5000, detection 186/500</title></circle>
+<circle class="dot s1" cx="100.9" cy="98.3" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 1.0%: FPR 52/5000, detection 211/500</title></circle>
+<circle class="dot s1" cx="115.7" cy="82.6" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 2.0%: FPR 103/5000, detection 257/500</title></circle>
+<circle class="dot s1" cx="133.7" cy="60.9" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 5.0%: FPR 236/5000, detection 321/500</title></circle>
+<circle class="dot s1" cx="147.9" cy="39.8" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 10.0%: FPR 453/5000, detection 383/500</title></circle>
+<circle class="dot s1" cx="161.5" cy="23.5" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 20.0%: FPR 850/5000, detection 431/500</title></circle>
+<circle class="dot s1" cx="179.9" cy="8.8" r="3"><title>humanised-aimbot, 0.5% amplitude, calibrated at 50.0%: FPR 1984/5000, detection 474/500</title></circle>
+<polyline class="line s2" stroke-dasharray="2 3" points="15.1,0.0 54.0,0.0 79.0,0.0 87.4,0.0 100.9,0.0 115.7,0.0 133.7,0.0 147.9,0.0 161.5,0.0 179.9,0.0"><title>adaptive-aimbot</title></polyline>
+<circle class="dot s2" cx="15.1" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 0.01%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="15.1" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 0.02%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="15.1" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 0.05%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="54.0" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 0.10%: FPR 6/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="79.0" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 0.20%: FPR 19/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="87.4" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 0.50%: FPR 28/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="100.9" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 1.0%: FPR 52/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="115.7" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 2.0%: FPR 103/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="133.7" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 5.0%: FPR 236/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="147.9" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 10.0%: FPR 453/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="161.5" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 20.0%: FPR 850/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="179.9" cy="0.0" r="3"><title>adaptive-aimbot, 0.5% amplitude, calibrated at 50.0%: FPR 1984/5000, detection 500/500</title></circle>
+<polyline class="line s3" stroke-dasharray="9 3 2 3" points="15.1,0.0 54.0,0.0 79.0,0.0 87.4,0.0 100.9,0.0 115.7,0.0 133.7,0.0 147.9,0.0 161.5,0.0 179.9,0.0"><title>fast-adaptive-aimbot</title></polyline>
+<circle class="dot s3" cx="15.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 0.01%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="15.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 0.02%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="15.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 0.05%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="54.0" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 0.10%: FPR 6/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="79.0" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 0.20%: FPR 19/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="87.4" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 0.50%: FPR 28/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="100.9" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 1.0%: FPR 52/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="115.7" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 2.0%: FPR 103/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="133.7" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 5.0%: FPR 236/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="147.9" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 10.0%: FPR 453/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="161.5" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 20.0%: FPR 850/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="179.9" cy="0.0" r="3"><title>fast-adaptive-aimbot, 0.5% amplitude, calibrated at 50.0%: FPR 1984/5000, detection 500/500</title></circle>
+<polyline class="line s4" stroke-dasharray="1 3" points="15.1,45.2 54.0,43.5 79.0,22.1 87.4,14.6 100.9,10.9 115.7,5.8 133.7,1.0 147.9,0.0 161.5,0.0 179.9,0.0"><title>smoothing-aimbot</title></polyline>
+<circle class="dot s4" cx="15.1" cy="45.2" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 0.01%: FPR 1/5000, detection 367/500</title></circle>
+<circle class="dot s4" cx="15.1" cy="45.2" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 0.02%: FPR 1/5000, detection 367/500</title></circle>
+<circle class="dot s4" cx="15.1" cy="45.2" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 0.05%: FPR 1/5000, detection 367/500</title></circle>
+<circle class="dot s4" cx="54.0" cy="43.5" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 0.10%: FPR 6/5000, detection 372/500</title></circle>
+<circle class="dot s4" cx="79.0" cy="22.1" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 0.20%: FPR 19/5000, detection 435/500</title></circle>
+<circle class="dot s4" cx="87.4" cy="14.6" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 0.50%: FPR 28/5000, detection 457/500</title></circle>
+<circle class="dot s4" cx="100.9" cy="10.9" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 1.0%: FPR 52/5000, detection 468/500</title></circle>
+<circle class="dot s4" cx="115.7" cy="5.8" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 2.0%: FPR 103/5000, detection 483/500</title></circle>
+<circle class="dot s4" cx="133.7" cy="1.0" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 5.0%: FPR 236/5000, detection 497/500</title></circle>
+<circle class="dot s4" cx="147.9" cy="0.0" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 10.0%: FPR 453/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="161.5" cy="0.0" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 20.0%: FPR 850/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="179.9" cy="0.0" r="3"><title>smoothing-aimbot, 0.5% amplitude, calibrated at 50.0%: FPR 1984/5000, detection 500/500</title></circle>
+<polyline class="line s5" stroke-dasharray="12 4" points="30.1,149.9 30.1,143.8 50.0,138.7 62.8,132.3 77.8,123.4 100.4,115.6 124.6,100.3 140.8,85.0 154.4,58.8 172.8,36.4"><title>recoil-macro</title></polyline>
+<circle class="dot s5" cx="30.1" cy="149.9" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 0.01%: FPR 2/5000, detection 59/500</title></circle>
+<circle class="dot s5" cx="30.1" cy="149.9" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 0.02%: FPR 2/5000, detection 59/500</title></circle>
+<circle class="dot s5" cx="30.1" cy="149.9" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 0.05%: FPR 2/5000, detection 59/500</title></circle>
+<circle class="dot s5" cx="30.1" cy="143.8" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 0.10%: FPR 2/5000, detection 77/500</title></circle>
+<circle class="dot s5" cx="50.0" cy="138.7" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 0.20%: FPR 5/5000, detection 92/500</title></circle>
+<circle class="dot s5" cx="62.8" cy="132.3" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 0.50%: FPR 9/5000, detection 111/500</title></circle>
+<circle class="dot s5" cx="77.8" cy="123.4" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 1.0%: FPR 18/5000, detection 137/500</title></circle>
+<circle class="dot s5" cx="100.4" cy="115.6" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 2.0%: FPR 51/5000, detection 160/500</title></circle>
+<circle class="dot s5" cx="124.6" cy="100.3" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 5.0%: FPR 155/5000, detection 205/500</title></circle>
+<circle class="dot s5" cx="140.8" cy="85.0" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 10.0%: FPR 327/5000, detection 250/500</title></circle>
+<circle class="dot s5" cx="154.4" cy="58.8" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 20.0%: FPR 613/5000, detection 327/500</title></circle>
+<circle class="dot s5" cx="172.8" cy="36.4" r="3"><title>recoil-macro, 0.5% amplitude, calibrated at 50.0%: FPR 1432/5000, detection 393/500</title></circle>
+<text class="t1" x="100" y="-10" text-anchor="middle" font-weight="600">0.5% amplitude</text>
+<text class="t2" x="0.0" y="184" text-anchor="middle">0.01%</text>
+<text class="t2" x="50.0" y="184" text-anchor="middle">0.1%</text>
+<text class="t2" x="100.0" y="184" text-anchor="middle">1%</text>
+<text class="t2" x="150.0" y="184" text-anchor="middle">10%</text>
+<text class="t2" x="200.0" y="184" text-anchor="middle">100%</text>
+</g>
+<g transform="translate(544,92)">
+<line class="grid" x1="0" y1="0" x2="200" y2="0"/>
+<line class="grid" x1="0" y1="42.5" x2="200" y2="42.5"/>
+<line class="grid" x1="0" y1="85" x2="200" y2="85"/>
+<line class="grid" x1="0" y1="127.5" x2="200" y2="127.5"/>
+<line class="grid" x1="0" y1="170" x2="200" y2="170"/>
+<line class="grid" x1="0.0" y1="0" x2="0.0" y2="170"/>
+<line class="grid" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<line class="grid" x1="100.0" y1="0" x2="100.0" y2="170"/>
+<line class="grid" x1="150.0" y1="0" x2="150.0" y2="170"/>
+<line class="grid" x1="200.0" y1="0" x2="200.0" y2="170"/>
+<polyline class="base" points="0.0,170.0 5.0,170.0 10.0,170.0 15.0,170.0 20.0,170.0 25.0,169.9 30.0,169.9 35.0,169.9 40.0,169.9 45.0,169.9 50.0,169.8 55.0,169.8 60.0,169.7 65.0,169.7 70.0,169.6 75.0,169.5 80.0,169.3 85.0,169.1 90.0,168.9 95.0,168.6 100.0,168.3 105.0,167.9 110.0,167.3 115.0,166.6 120.0,165.7 125.0,164.6 130.0,163.2 135.0,161.5 140.0,159.3 145.0,156.5 150.0,153.0 155.0,148.6 160.0,143.1 165.0,136.1 170.0,127.3 175.0,116.2 180.0,102.3 185.0,84.8 190.0,62.7 195.0,35.0 200.0,0.0"/>
+<line class="ref" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<rect class="axis" x="0" y="0" width="200" height="170"/>
+<polyline class="line s0" points="0.0,0.0 15.1,0.0 57.3,0.0 83.1,0.0 97.2,0.0 110.2,0.0 131.3,0.0 147.7,0.0 161.4,0.0 179.3,0.0"><title>flick-aimbot</title></polyline>
+<circle class="dot s0" cx="0.0" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 0.01%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="0.0" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 0.02%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="0.0" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 0.05%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="15.1" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 0.10%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="57.3" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 0.20%: FPR 7/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="83.1" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 0.50%: FPR 23/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="97.2" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 1.0%: FPR 44/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="110.2" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 2.0%: FPR 80/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="131.3" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 5.0%: FPR 211/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="147.7" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 10.0%: FPR 450/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="161.4" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 20.0%: FPR 844/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="179.3" cy="0.0" r="3"><title>flick-aimbot, 1% amplitude, calibrated at 50.0%: FPR 1925/5000, detection 500/500</title></circle>
+<polyline class="line s1" stroke-dasharray="6 3" points="0.0,36.0 15.1,32.0 57.3,28.2 83.1,19.0 97.2,10.5 110.2,4.8 131.3,1.4 147.7,1.0 161.4,0.3 179.3,0.0"><title>humanised-aimbot</title></polyline>
+<circle class="dot s1" cx="0.0" cy="36.0" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 0.01%: FPR 0/5000, detection 394/500</title></circle>
+<circle class="dot s1" cx="0.0" cy="36.0" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 0.02%: FPR 0/5000, detection 394/500</title></circle>
+<circle class="dot s1" cx="0.0" cy="36.0" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 0.05%: FPR 0/5000, detection 394/500</title></circle>
+<circle class="dot s1" cx="15.1" cy="32.0" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 0.10%: FPR 1/5000, detection 406/500</title></circle>
+<circle class="dot s1" cx="57.3" cy="28.2" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 0.20%: FPR 7/5000, detection 417/500</title></circle>
+<circle class="dot s1" cx="83.1" cy="19.0" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 0.50%: FPR 23/5000, detection 444/500</title></circle>
+<circle class="dot s1" cx="97.2" cy="10.5" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 1.0%: FPR 44/5000, detection 469/500</title></circle>
+<circle class="dot s1" cx="110.2" cy="4.8" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 2.0%: FPR 80/5000, detection 486/500</title></circle>
+<circle class="dot s1" cx="131.3" cy="1.4" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 5.0%: FPR 211/5000, detection 496/500</title></circle>
+<circle class="dot s1" cx="147.7" cy="1.0" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 10.0%: FPR 450/5000, detection 497/500</title></circle>
+<circle class="dot s1" cx="161.4" cy="0.3" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 20.0%: FPR 844/5000, detection 499/500</title></circle>
+<circle class="dot s1" cx="179.3" cy="0.0" r="3"><title>humanised-aimbot, 1% amplitude, calibrated at 50.0%: FPR 1925/5000, detection 500/500</title></circle>
+<polyline class="line s2" stroke-dasharray="2 3" points="0.0,0.0 15.1,0.0 57.3,0.0 83.1,0.0 97.2,0.0 110.2,0.0 131.3,0.0 147.7,0.0 161.4,0.0 179.3,0.0"><title>adaptive-aimbot</title></polyline>
+<circle class="dot s2" cx="0.0" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 0.01%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="0.0" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 0.02%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="0.0" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 0.05%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="15.1" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 0.10%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="57.3" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 0.20%: FPR 7/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="83.1" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 0.50%: FPR 23/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="97.2" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 1.0%: FPR 44/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="110.2" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 2.0%: FPR 80/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="131.3" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 5.0%: FPR 211/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="147.7" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 10.0%: FPR 450/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="161.4" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 20.0%: FPR 844/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="179.3" cy="0.0" r="3"><title>adaptive-aimbot, 1% amplitude, calibrated at 50.0%: FPR 1925/5000, detection 500/500</title></circle>
+<polyline class="line s3" stroke-dasharray="9 3 2 3" points="0.0,0.0 15.1,0.0 57.3,0.0 83.1,0.0 97.2,0.0 110.2,0.0 131.3,0.0 147.7,0.0 161.4,0.0 179.3,0.0"><title>fast-adaptive-aimbot</title></polyline>
+<circle class="dot s3" cx="0.0" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 0.01%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="0.0" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 0.02%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="0.0" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 0.05%: FPR 0/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="15.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 0.10%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="57.3" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 0.20%: FPR 7/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="83.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 0.50%: FPR 23/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="97.2" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 1.0%: FPR 44/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="110.2" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 2.0%: FPR 80/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="131.3" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 5.0%: FPR 211/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="147.7" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 10.0%: FPR 450/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="161.4" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 20.0%: FPR 844/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="179.3" cy="0.0" r="3"><title>fast-adaptive-aimbot, 1% amplitude, calibrated at 50.0%: FPR 1925/5000, detection 500/500</title></circle>
+<polyline class="line s4" stroke-dasharray="1 3" points="0.0,3.1 15.1,1.7 57.3,0.0 83.1,0.0 97.2,0.0 110.2,0.0 131.3,0.0 147.7,0.0 161.4,0.0 179.3,0.0"><title>smoothing-aimbot</title></polyline>
+<circle class="dot s4" cx="0.0" cy="3.1" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 0.01%: FPR 0/5000, detection 491/500</title></circle>
+<circle class="dot s4" cx="0.0" cy="3.1" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 0.02%: FPR 0/5000, detection 491/500</title></circle>
+<circle class="dot s4" cx="0.0" cy="3.1" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 0.05%: FPR 0/5000, detection 491/500</title></circle>
+<circle class="dot s4" cx="15.1" cy="1.7" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 0.10%: FPR 1/5000, detection 495/500</title></circle>
+<circle class="dot s4" cx="57.3" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 0.20%: FPR 7/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="83.1" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 0.50%: FPR 23/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="97.2" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 1.0%: FPR 44/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="110.2" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 2.0%: FPR 80/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="131.3" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 5.0%: FPR 211/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="147.7" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 10.0%: FPR 450/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="161.4" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 20.0%: FPR 844/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="179.3" cy="0.0" r="3"><title>smoothing-aimbot, 1% amplitude, calibrated at 50.0%: FPR 1925/5000, detection 500/500</title></circle>
+<polyline class="line s5" stroke-dasharray="12 4" points="15.1,109.1 15.1,106.1 45.2,95.9 65.1,71.7 79.0,64.3 100.4,54.4 124.7,38.8 139.8,28.9 154.5,15.0 173.5,4.4"><title>recoil-macro</title></polyline>
+<circle class="dot s5" cx="15.1" cy="109.1" r="3"><title>recoil-macro, 1% amplitude, calibrated at 0.01%: FPR 1/5000, detection 179/500</title></circle>
+<circle class="dot s5" cx="15.1" cy="109.1" r="3"><title>recoil-macro, 1% amplitude, calibrated at 0.02%: FPR 1/5000, detection 179/500</title></circle>
+<circle class="dot s5" cx="15.1" cy="109.1" r="3"><title>recoil-macro, 1% amplitude, calibrated at 0.05%: FPR 1/5000, detection 179/500</title></circle>
+<circle class="dot s5" cx="15.1" cy="106.1" r="3"><title>recoil-macro, 1% amplitude, calibrated at 0.10%: FPR 1/5000, detection 188/500</title></circle>
+<circle class="dot s5" cx="45.2" cy="95.9" r="3"><title>recoil-macro, 1% amplitude, calibrated at 0.20%: FPR 4/5000, detection 218/500</title></circle>
+<circle class="dot s5" cx="65.1" cy="71.7" r="3"><title>recoil-macro, 1% amplitude, calibrated at 0.50%: FPR 10/5000, detection 289/500</title></circle>
+<circle class="dot s5" cx="79.0" cy="64.3" r="3"><title>recoil-macro, 1% amplitude, calibrated at 1.0%: FPR 19/5000, detection 311/500</title></circle>
+<circle class="dot s5" cx="100.4" cy="54.4" r="3"><title>recoil-macro, 1% amplitude, calibrated at 2.0%: FPR 51/5000, detection 340/500</title></circle>
+<circle class="dot s5" cx="124.7" cy="38.8" r="3"><title>recoil-macro, 1% amplitude, calibrated at 5.0%: FPR 156/5000, detection 386/500</title></circle>
+<circle class="dot s5" cx="139.8" cy="28.9" r="3"><title>recoil-macro, 1% amplitude, calibrated at 10.0%: FPR 312/5000, detection 415/500</title></circle>
+<circle class="dot s5" cx="154.5" cy="15.0" r="3"><title>recoil-macro, 1% amplitude, calibrated at 20.0%: FPR 616/5000, detection 456/500</title></circle>
+<circle class="dot s5" cx="173.5" cy="4.4" r="3"><title>recoil-macro, 1% amplitude, calibrated at 50.0%: FPR 1478/5000, detection 487/500</title></circle>
+<text class="t1" x="100" y="-10" text-anchor="middle" font-weight="600">1% amplitude</text>
+<text class="t2" x="0.0" y="184" text-anchor="middle">0.01%</text>
+<text class="t2" x="50.0" y="184" text-anchor="middle">0.1%</text>
+<text class="t2" x="100.0" y="184" text-anchor="middle">1%</text>
+<text class="t2" x="150.0" y="184" text-anchor="middle">10%</text>
+<text class="t2" x="200.0" y="184" text-anchor="middle">100%</text>
+</g>
+<g transform="translate(778,92)">
+<line class="grid" x1="0" y1="0" x2="200" y2="0"/>
+<line class="grid" x1="0" y1="42.5" x2="200" y2="42.5"/>
+<line class="grid" x1="0" y1="85" x2="200" y2="85"/>
+<line class="grid" x1="0" y1="127.5" x2="200" y2="127.5"/>
+<line class="grid" x1="0" y1="170" x2="200" y2="170"/>
+<line class="grid" x1="0.0" y1="0" x2="0.0" y2="170"/>
+<line class="grid" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<line class="grid" x1="100.0" y1="0" x2="100.0" y2="170"/>
+<line class="grid" x1="150.0" y1="0" x2="150.0" y2="170"/>
+<line class="grid" x1="200.0" y1="0" x2="200.0" y2="170"/>
+<polyline class="base" points="0.0,170.0 5.0,170.0 10.0,170.0 15.0,170.0 20.0,170.0 25.0,169.9 30.0,169.9 35.0,169.9 40.0,169.9 45.0,169.9 50.0,169.8 55.0,169.8 60.0,169.7 65.0,169.7 70.0,169.6 75.0,169.5 80.0,169.3 85.0,169.1 90.0,168.9 95.0,168.6 100.0,168.3 105.0,167.9 110.0,167.3 115.0,166.6 120.0,165.7 125.0,164.6 130.0,163.2 135.0,161.5 140.0,159.3 145.0,156.5 150.0,153.0 155.0,148.6 160.0,143.1 165.0,136.1 170.0,127.3 175.0,116.2 180.0,102.3 185.0,84.8 190.0,62.7 195.0,35.0 200.0,0.0"/>
+<line class="ref" x1="50.0" y1="0" x2="50.0" y2="170"/>
+<rect class="axis" x="0" y="0" width="200" height="170"/>
+<polyline class="line s0" points="15.1,0.0 45.2,0.0 62.8,0.0 76.6,0.0 96.2,0.0 108.2,0.0 131.1,0.0 145.9,0.0 161.3,0.0 178.7,0.0"><title>flick-aimbot</title></polyline>
+<circle class="dot s0" cx="15.1" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 0.01%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="15.1" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 0.02%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="15.1" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 0.05%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="45.2" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 0.10%: FPR 4/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="62.8" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 0.20%: FPR 9/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="76.6" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 0.50%: FPR 17/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="96.2" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 1.0%: FPR 42/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="108.2" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 2.0%: FPR 73/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="131.1" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 5.0%: FPR 209/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="145.9" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 10.0%: FPR 414/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="161.3" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 20.0%: FPR 840/5000, detection 500/500</title></circle>
+<circle class="dot s0" cx="178.7" cy="0.0" r="3"><title>flick-aimbot, 2% amplitude, calibrated at 50.0%: FPR 1875/5000, detection 500/500</title></circle>
+<polyline class="line s1" stroke-dasharray="6 3" points="15.1,1.0 45.2,0.3 62.8,0.0 76.6,0.0 96.2,0.0 108.2,0.0 131.1,0.0 145.9,0.0 161.3,0.0 178.7,0.0"><title>humanised-aimbot</title></polyline>
+<circle class="dot s1" cx="15.1" cy="1.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 0.01%: FPR 1/5000, detection 497/500</title></circle>
+<circle class="dot s1" cx="15.1" cy="1.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 0.02%: FPR 1/5000, detection 497/500</title></circle>
+<circle class="dot s1" cx="15.1" cy="1.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 0.05%: FPR 1/5000, detection 497/500</title></circle>
+<circle class="dot s1" cx="45.2" cy="0.3" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 0.10%: FPR 4/5000, detection 499/500</title></circle>
+<circle class="dot s1" cx="62.8" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 0.20%: FPR 9/5000, detection 500/500</title></circle>
+<circle class="dot s1" cx="76.6" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 0.50%: FPR 17/5000, detection 500/500</title></circle>
+<circle class="dot s1" cx="96.2" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 1.0%: FPR 42/5000, detection 500/500</title></circle>
+<circle class="dot s1" cx="108.2" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 2.0%: FPR 73/5000, detection 500/500</title></circle>
+<circle class="dot s1" cx="131.1" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 5.0%: FPR 209/5000, detection 500/500</title></circle>
+<circle class="dot s1" cx="145.9" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 10.0%: FPR 414/5000, detection 500/500</title></circle>
+<circle class="dot s1" cx="161.3" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 20.0%: FPR 840/5000, detection 500/500</title></circle>
+<circle class="dot s1" cx="178.7" cy="0.0" r="3"><title>humanised-aimbot, 2% amplitude, calibrated at 50.0%: FPR 1875/5000, detection 500/500</title></circle>
+<polyline class="line s2" stroke-dasharray="2 3" points="15.1,0.0 45.2,0.0 62.8,0.0 76.6,0.0 96.2,0.0 108.2,0.0 131.1,0.0 145.9,0.0 161.3,0.0 178.7,0.0"><title>adaptive-aimbot</title></polyline>
+<circle class="dot s2" cx="15.1" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 0.01%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="15.1" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 0.02%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="15.1" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 0.05%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="45.2" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 0.10%: FPR 4/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="62.8" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 0.20%: FPR 9/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="76.6" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 0.50%: FPR 17/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="96.2" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 1.0%: FPR 42/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="108.2" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 2.0%: FPR 73/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="131.1" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 5.0%: FPR 209/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="145.9" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 10.0%: FPR 414/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="161.3" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 20.0%: FPR 840/5000, detection 500/500</title></circle>
+<circle class="dot s2" cx="178.7" cy="0.0" r="3"><title>adaptive-aimbot, 2% amplitude, calibrated at 50.0%: FPR 1875/5000, detection 500/500</title></circle>
+<polyline class="line s3" stroke-dasharray="9 3 2 3" points="15.1,0.0 45.2,0.0 62.8,0.0 76.6,0.0 96.2,0.0 108.2,0.0 131.1,0.0 145.9,0.0 161.3,0.0 178.7,0.0"><title>fast-adaptive-aimbot</title></polyline>
+<circle class="dot s3" cx="15.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 0.01%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="15.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 0.02%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="15.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 0.05%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="45.2" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 0.10%: FPR 4/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="62.8" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 0.20%: FPR 9/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="76.6" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 0.50%: FPR 17/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="96.2" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 1.0%: FPR 42/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="108.2" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 2.0%: FPR 73/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="131.1" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 5.0%: FPR 209/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="145.9" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 10.0%: FPR 414/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="161.3" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 20.0%: FPR 840/5000, detection 500/500</title></circle>
+<circle class="dot s3" cx="178.7" cy="0.0" r="3"><title>fast-adaptive-aimbot, 2% amplitude, calibrated at 50.0%: FPR 1875/5000, detection 500/500</title></circle>
+<polyline class="line s4" stroke-dasharray="1 3" points="15.1,0.0 45.2,0.0 62.8,0.0 76.6,0.0 96.2,0.0 108.2,0.0 131.1,0.0 145.9,0.0 161.3,0.0 178.7,0.0"><title>smoothing-aimbot</title></polyline>
+<circle class="dot s4" cx="15.1" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 0.01%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="15.1" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 0.02%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="15.1" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 0.05%: FPR 1/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="45.2" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 0.10%: FPR 4/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="62.8" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 0.20%: FPR 9/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="76.6" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 0.50%: FPR 17/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="96.2" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 1.0%: FPR 42/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="108.2" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 2.0%: FPR 73/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="131.1" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 5.0%: FPR 209/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="145.9" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 10.0%: FPR 414/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="161.3" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 20.0%: FPR 840/5000, detection 500/500</title></circle>
+<circle class="dot s4" cx="178.7" cy="0.0" r="3"><title>smoothing-aimbot, 2% amplitude, calibrated at 50.0%: FPR 1875/5000, detection 500/500</title></circle>
+<polyline class="line s5" stroke-dasharray="12 4" points="15.1,33.3 30.1,28.2 45.2,22.8 75.3,12.6 85.8,8.2 104.7,3.4 124.7,2.0 141.4,0.3 154.8,0.3 173.1,0.0"><title>recoil-macro</title></polyline>
+<circle class="dot s5" cx="15.1" cy="33.3" r="3"><title>recoil-macro, 2% amplitude, calibrated at 0.01%: FPR 1/5000, detection 402/500</title></circle>
+<circle class="dot s5" cx="15.1" cy="33.3" r="3"><title>recoil-macro, 2% amplitude, calibrated at 0.02%: FPR 1/5000, detection 402/500</title></circle>
+<circle class="dot s5" cx="15.1" cy="33.3" r="3"><title>recoil-macro, 2% amplitude, calibrated at 0.05%: FPR 1/5000, detection 402/500</title></circle>
+<circle class="dot s5" cx="30.1" cy="28.2" r="3"><title>recoil-macro, 2% amplitude, calibrated at 0.10%: FPR 2/5000, detection 417/500</title></circle>
+<circle class="dot s5" cx="45.2" cy="22.8" r="3"><title>recoil-macro, 2% amplitude, calibrated at 0.20%: FPR 4/5000, detection 433/500</title></circle>
+<circle class="dot s5" cx="75.3" cy="12.6" r="3"><title>recoil-macro, 2% amplitude, calibrated at 0.50%: FPR 16/5000, detection 463/500</title></circle>
+<circle class="dot s5" cx="85.8" cy="8.2" r="3"><title>recoil-macro, 2% amplitude, calibrated at 1.0%: FPR 26/5000, detection 476/500</title></circle>
+<circle class="dot s5" cx="104.7" cy="3.4" r="3"><title>recoil-macro, 2% amplitude, calibrated at 2.0%: FPR 62/5000, detection 490/500</title></circle>
+<circle class="dot s5" cx="124.7" cy="2.0" r="3"><title>recoil-macro, 2% amplitude, calibrated at 5.0%: FPR 156/5000, detection 494/500</title></circle>
+<circle class="dot s5" cx="141.4" cy="0.3" r="3"><title>recoil-macro, 2% amplitude, calibrated at 10.0%: FPR 336/5000, detection 499/500</title></circle>
+<circle class="dot s5" cx="154.8" cy="0.3" r="3"><title>recoil-macro, 2% amplitude, calibrated at 20.0%: FPR 624/5000, detection 499/500</title></circle>
+<circle class="dot s5" cx="173.1" cy="0.0" r="3"><title>recoil-macro, 2% amplitude, calibrated at 50.0%: FPR 1451/5000, detection 500/500</title></circle>
+<text class="t1" x="100" y="-10" text-anchor="middle" font-weight="600">2% amplitude</text>
+<text class="t2" x="0.0" y="184" text-anchor="middle">0.01%</text>
+<text class="t2" x="50.0" y="184" text-anchor="middle">0.1%</text>
+<text class="t2" x="100.0" y="184" text-anchor="middle">1%</text>
+<text class="t2" x="150.0" y="184" text-anchor="middle">10%</text>
+<text class="t2" x="200.0" y="184" text-anchor="middle">100%</text>
+</g>
+<line class="line s0" x1="76" y1="306" x2="104" y2="306"/>
+<text class="t1" x="110" y="306" dominant-baseline="middle">flick-aimbot</text>
+<line class="line s1" stroke-dasharray="6 3" x1="208.8" y1="306" x2="236.8" y2="306"/>
+<text class="t1" x="242.8" y="306" dominant-baseline="middle">humanised-aimbot</text>
+<line class="line s2" stroke-dasharray="2 3" x1="367.20000000000005" y1="306" x2="395.20000000000005" y2="306"/>
+<text class="t1" x="401.20000000000005" y="306" dominant-baseline="middle">adaptive-aimbot</text>
+<line class="line s3" stroke-dasharray="9 3 2 3" x1="519.2" y1="306" x2="547.2" y2="306"/>
+<text class="t1" x="553.2" y="306" dominant-baseline="middle">fast-adaptive-aimbot</text>
+<line class="line s4" stroke-dasharray="1 3" x1="703.2" y1="306" x2="731.2" y2="306"/>
+<text class="t1" x="737.2" y="306" dominant-baseline="middle">smoothing-aimbot</text>
+<line class="line s5" stroke-dasharray="12 4" x1="861.6" y1="306" x2="889.6" y2="306"/>
+<text class="t1" x="895.6" y="306" dominant-baseline="middle">recoil-macro</text>
+<line class="ref" x1="76" y1="326" x2="104" y2="326"/>
+<text class="t2" x="110" y="326" dominant-baseline="middle">target false-positive rate (0.10%)</text>
+<line class="base" x1="349.6" y1="326" x2="377.6" y2="326"/>
+<text class="t2" x="383.6" y="326" dominant-baseline="middle">chance</text>
+<text class="t2" x="76" y="350">Simulated cheats; each point is one calibration target. Numbers: roc.csv. Revision 49b9ebf9ed9e.</text>
+</svg>
