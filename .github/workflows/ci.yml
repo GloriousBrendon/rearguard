@@ -1,12 +1,26 @@
 name: CI
 
-# Runs on every branch push; PRs from this repo show these runs as their checks.
+# Runs on pushes to main, on every pull request and on request. A pull request from a
+# branch of this repository runs once (as a pull request, not also as a branch push).
+#
+# No study key ever leaves a job. The study-build job makes a throwaway key, uses it for
+# its own smoke test and deletes it; nothing built with it is uploaded. The one build
+# that is uploaded (for the Windows smoke job) packs demo/tests/public-test-key.hex,
+# which is committed, public test data. Releases for volunteers are never built here:
+# see docs/study/facilitator-instructions.md.
 on:
   push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# A newer push to a pull request replaces its older run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,7 +34,9 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned toolchain (rust-toolchain.toml)
         run: rustup toolchain install
       - name: Cache cargo registry and target
@@ -49,7 +65,9 @@ jobs:
     name: dependency policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned toolchain (rust-toolchain.toml)
         run: rustup toolchain install
       - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
@@ -66,7 +84,9 @@ jobs:
     name: licence headers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: SPDX header in every first-party source file
         run: scripts/check-spdx.sh
 
@@ -83,7 +103,9 @@ jobs:
       # SHA-512 of Godot_v${GODOT_VERSION}_linux.x86_64.zip, from the release's SHA512-SUMS.txt.
       GODOT_ZIP_SHA512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned toolchain (rust-toolchain.toml)
         run: rustup toolchain install
       - name: Cache cargo registry and target
@@ -119,18 +141,18 @@ jobs:
       # Import before building the extension: with a GDExtension class registered, Godot
       # 4.7.2's first headless import segfaults while shutting down (gdext 0.5.5; any
       # class triggers it, and later runs are unaffected). See crates/rearguard-godot/README.md.
-      # The cargo cache may hold a library from an earlier run, so remove it first; the
-      # build step below puts it back.
+      # The cargo cache may hold a library from an earlier run, so the script removes it
+      # first; the build step below puts it back. It fails if the import prints any error
+      # other than the missing library.
       - name: Import project
-        run: |
-          rm -f target/debug/librearguard_godot.so
-          timeout 300 ~/godot/godot --headless --path demo --import
+        run: scripts/godot-import.sh ~/godot/godot
       # demo/rearguard.gdextension loads target/debug/librearguard_godot.so; the live-loop
       # tests (demo/scripts/live_loop_test.gd) run target/debug/rearguard-server.
       - name: Build the Godot extension and the server
         run: cargo build --locked -p rearguard-godot -p rearguard-server
       - name: Run tests
-        # Extension tests fail (instead of skipping) if the library did not load.
+        # Extension tests fail (instead of skipping) if the library did not load. The
+        # runner also fails if fewer tests ran than demo/tests/expected_test_count.txt says.
         env:
           REARGUARD_REQUIRE_EXTENSION: "1"
         run: timeout 600 ~/godot/godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
@@ -158,7 +180,9 @@ jobs:
       # SHA-512 of Godot_v${GODOT_VERSION}_win64.exe.zip, from the release's SHA512-SUMS.txt.
       GODOT_WIN_ZIP_SHA512: 83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned toolchain (rust-toolchain.toml)
         run: rustup toolchain install
       - name: Cache cargo registry and target
@@ -194,16 +218,15 @@ jobs:
           ~/godot/Godot_v${GODOT_VERSION}_win64_console.exe --version
       # Import before building, as on Linux (first-import crash, crates/rearguard-godot/README.md).
       - name: Import project
-        run: |
-          rm -f target/debug/rearguard_godot.dll
-          timeout 300 "$GODOT_BIN" --headless --path demo --import
+        run: scripts/godot-import.sh "$GODOT_BIN"
       - name: Build the Godot extension and the server
         run: cargo build --locked -p rearguard-godot -p rearguard-server
       - name: Run tests
         env:
           REARGUARD_REQUIRE_EXTENSION: "1"
         run: timeout 900 "$GODOT_BIN" --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
-      # The study export (job `study-build`) packs this DLL into the Windows build.
+      # The study export (job `study-build`) packs this DLL into the Windows build. It
+      # holds no key.
       - name: Build the release extension
         run: cargo build --release --locked -p rearguard-godot
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -211,11 +234,13 @@ jobs:
           name: rearguard-godot-windows-release
           path: target/release/rearguard_godot.dll
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 1
 
-  # The human-study build (task 1.9a): exports Linux and Windows builds with the release
-  # templates, a fresh study key per run, and smoke-tests the Linux build. See
-  # docs/study/facilitator-instructions.md.
+  # Checks that the human-study build (task 1.9a) still exports and works; it does not
+  # make releases. The Linux build is exported with a throwaway key made in this job,
+  # smoke-tested and thrown away with the key. The Windows build is exported with the
+  # public test key and uploaded for `study-smoke-windows`. Real releases are built
+  # locally, with a key kept outside the repository: docs/study/facilitator-instructions.md.
   study-build:
     name: study build (export, linux smoke)
     needs: godot-windows
@@ -227,7 +252,9 @@ jobs:
       # SHA-512 of Godot_v${GODOT_VERSION}_export_templates.tpz, from the release's SHA512-SUMS.txt.
       GODOT_TEMPLATES_SHA512: ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned toolchain (rust-toolchain.toml)
         run: rustup toolchain install
       - name: Cache cargo registry and target
@@ -267,28 +294,33 @@ jobs:
           cat <(unzip -p ~/godot-dl/templates.tpz templates/version.txt)
       # demo/ is imported for the export check the smoke test runs with the editor.
       - name: Import project
-        run: |
-          rm -f target/debug/librearguard_godot.so
-          timeout 300 ~/godot/godot --headless --path demo --import
+        run: scripts/godot-import.sh ~/godot/godot
       - name: Build the release extension and the key tool
         run: cargo build --locked --release -p rearguard-godot && cargo build --locked -p rearguard-server
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: rearguard-godot-windows-release
           path: target/release
-      # A fresh key per run: every run's builds are a release of their own. The key is
-      # never printed; the facilitator downloads it from the study-key artifact.
-      - name: Create this release's study key
+      # A throwaway key, never printed and never uploaded. The label marks every export
+      # these builds write as coming from CI, not from a release.
+      - name: Create a throwaway study key
         run: |
-          echo "STUDY_RELEASE=r${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "STUDY_RELEASE=ci-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/key"
           target/debug/rearguard-server gen-secret "$RUNNER_TEMP/key/study-key.hex"
-      - name: Export the Linux and Windows builds
+      - name: Export the Linux build (throwaway key)
         run: |
-          scripts/export-study.sh --godot ~/godot/godot --templates ~/templates \
+          scripts/export-study.sh --only linux --godot ~/godot/godot --templates ~/templates \
             --study-key "$RUNNER_TEMP/key/study-key.hex" --release "$STUDY_RELEASE" \
             --out "$RUNNER_TEMP/out" --keep-build "$RUNNER_TEMP/build"
-          printf '%s\n' "$STUDY_RELEASE" > "$RUNNER_TEMP/key/release.txt"
+      # The only build that leaves this job. Its key is demo/tests/public-test-key.hex,
+      # which is committed and public, so the artifact holds no secret and the Windows
+      # job needs no key artifact.
+      - name: Export the Windows build (public test key)
+        run: |
+          scripts/export-study.sh --only windows --godot ~/godot/godot --templates ~/templates \
+            --study-key demo/tests/public-test-key.hex --release "$STUDY_RELEASE" \
+            --out "$RUNNER_TEMP/out-windows"
       # The editor runs the export check with the extension; this is the library the Linux
       # build ships.
       - name: Smoke test the Linux build
@@ -307,32 +339,22 @@ jobs:
             --humans "$RUNNER_TEMP/export" --study-key "$RUNNER_TEMP/key/study-key.hex" \
             --out "$RUNNER_TEMP/eval-study"
           cat "$RUNNER_TEMP/eval-study/report.md"
+      # Before anything is uploaded: the throwaway key and everything built with it go.
+      - name: Delete the throwaway key and the Linux build
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/key" "$RUNNER_TEMP/build" "$RUNNER_TEMP/out" "$RUNNER_TEMP/export"
+      # Not a release: public test key, kept one day, only for the Windows smoke job.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: study-build-linux
-          path: ${{ runner.temp }}/out/rearguard-study-*-linux-x86_64.zip
+          name: ci-smoke-windows-build-public-test-key
+          path: ${{ runner.temp }}/out-windows/rearguard-study-*-windows-x86_64.zip
           if-no-files-found: error
           compression-level: 0
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: study-build-windows
-          path: ${{ runner.temp }}/out/rearguard-study-*-windows-x86_64.zip
-          if-no-files-found: error
-          compression-level: 0
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: study-build-sizes
-          path: ${{ runner.temp }}/out/build-sizes.md
-      # The facilitator's copy of the key packed into this run's builds. Never send it to
-      # participants; see docs/study/facilitator-instructions.md.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: study-key-facilitator-only
-          path: ${{ runner.temp }}/key/
-          if-no-files-found: error
+          retention-days: 1
 
   # Runs the exported Windows build on Windows: launch, decline, no files; then a
-  # self-test export checked like task 1.9's.
+  # self-test export checked like task 1.9's. The build packs the public test key, read
+  # here from the checkout; no key is downloaded.
   study-smoke-windows:
     name: study build (windows smoke)
     needs: study-build
@@ -345,7 +367,9 @@ jobs:
       GODOT_VERSION: 4.7.2-stable
       GODOT_WIN_ZIP_SHA512: 83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Cache Godot download
         id: godot-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -367,12 +391,8 @@ jobs:
           ~/godot/Godot_v${GODOT_VERSION}_win64_console.exe --version
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: study-build-windows
+          name: ci-smoke-windows-build-public-test-key
           path: ${{ runner.temp }}/dl
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: study-key-facilitator-only
-          path: ${{ runner.temp }}/key
       - name: Unpack the build
         run: |
           cd "$(cygpath -u "$RUNNER_TEMP")"
@@ -381,12 +401,12 @@ jobs:
       # Import with no extension present, then give the editor the build's own DLL for
       # the export check.
       - name: Import project
-        run: timeout 300 "$GODOT_BIN" --headless --path demo --import
+        run: scripts/godot-import.sh "$GODOT_BIN"
       - name: Smoke test the Windows build
         run: |
           t="$(cygpath -u "$RUNNER_TEMP")"
           mkdir -p target/debug
           cp "$t"/build/rearguard-study-*/rearguard_godot.dll target/debug/
           scripts/smoke-study-build.sh --build "$(echo "$t"/build/rearguard-study-*)" \
-            --godot "$GODOT_BIN" --key "$t/key/study-key.hex" \
-            --release "$(tr -d '\r\n' < "$t/key/release.txt")"
+            --godot "$GODOT_BIN" --key demo/tests/public-test-key.hex \
+            --release "ci-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"

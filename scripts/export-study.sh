@@ -11,9 +11,11 @@
 #   --release LABEL    this release's label, written into every export manifest
 #   --out DIR          where the two zips go
 #   --keep-build DIR   optional: also copy the unzipped builds to DIR/linux and DIR/windows
+#   --only PLATFORM    optional: export only `linux` or only `windows` (CI's smoke builds)
 #
 # The Rust extension must already be built in release mode for both platforms:
-# target/release/librearguard_godot.so and target/release/rearguard_godot.dll.
+# target/release/librearguard_godot.so and target/release/rearguard_godot.dll (with
+# --only, just that platform's library and template).
 #
 # The export runs from a staging copy of demo/ in a temporary directory, so the key never
 # enters the working tree. The staging copy:
@@ -44,14 +46,16 @@ usage() {
 #   --release LABEL    this release's label, written into every export manifest
 #   --out DIR          where the two zips go
 #   --keep-build DIR   optional: also copy the unzipped builds to DIR/linux and DIR/windows
+#   --only PLATFORM    optional: export only `linux` or only `windows` (CI's smoke builds)
 #
 # The Rust extension must already be built in release mode for both platforms:
-# target/release/librearguard_godot.so and target/release/rearguard_godot.dll.
+# target/release/librearguard_godot.so and target/release/rearguard_godot.dll (with
+# --only, just that platform's library and template).
 USAGE
   exit 2
 }
 
-godot="" templates="" key="" release="" out="" keep=""
+godot="" templates="" key="" release="" out="" keep="" only=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --godot) godot="$2"; shift 2 ;;
@@ -60,16 +64,26 @@ while [ $# -gt 0 ]; do
     --release) release="$2"; shift 2 ;;
     --out) out="$2"; shift 2 ;;
     --keep-build) keep="$2"; shift 2 ;;
+    --only) only="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
 [ -n "$godot" ] && [ -n "$templates" ] && [ -n "$key" ] && [ -n "$release" ] && [ -n "$out" ] || usage
+case "$only" in
+  "") platforms=(linux windows) ;;
+  linux|windows) platforms=("$only") ;;
+  *) usage ;;
+esac
+has() { local p; for p in "${platforms[@]}"; do [ "$p" = "$1" ] && return 0; done; return 1; }
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 templates="$(cd "$templates" && pwd)"
 so="$repo/target/release/librearguard_godot.so"
 dll="$repo/target/release/rearguard_godot.dll"
-for f in "$godot" "$templates/linux_release.x86_64" "$templates/windows_release_x86_64.exe" "$so" "$dll" "$key"; do
+needed=("$godot" "$key")
+if has linux; then needed+=("$templates/linux_release.x86_64" "$so"); fi
+if has windows; then needed+=("$templates/windows_release_x86_64.exe" "$dll"); fi
+for f in "${needed[@]}"; do
   [ -f "$f" ] || { echo "export-study: missing $f" >&2; exit 1; }
 done
 # Check the key's shape without ever printing it.
@@ -128,7 +142,7 @@ sed -e "s|@LINUX_TEMPLATE@|$templates/linux_release.x86_64|" \
     -e "s|@WINDOWS_TEMPLATE@|$templates/windows_release_x86_64.exe|" \
     "$repo/scripts/study-export/export_presets.cfg" > "$proj/export_presets.cfg"
 
-# 5. Export both.
+# 5. Export each platform asked for.
 export_one() { # preset, output file
   mkdir -p "$(dirname "$2")"
   timeout 600 "$godot" --headless --path "$proj" --export-release "$1" "$2" > "$stage/export-$1.log" 2>&1 || true
@@ -138,11 +152,15 @@ export_one() { # preset, output file
     exit 1
   fi
 }
-export_one Linux "$stage/build/linux/RearguardStudy.x86_64"
-export_one Windows "$stage/build/windows/RearguardStudy.exe"
-[ -f "$stage/build/linux/librearguard_godot.so" ] || { echo "export-study: library missing from the Linux export" >&2; exit 1; }
-[ -f "$stage/build/windows/rearguard_godot.dll" ] || { echo "export-study: library missing from the Windows export" >&2; exit 1; }
-chmod 755 "$stage/build/linux/RearguardStudy.x86_64"
+if has linux; then
+  export_one Linux "$stage/build/linux/RearguardStudy.x86_64"
+  [ -f "$stage/build/linux/librearguard_godot.so" ] || { echo "export-study: library missing from the Linux export" >&2; exit 1; }
+  chmod 755 "$stage/build/linux/RearguardStudy.x86_64"
+fi
+if has windows; then
+  export_one Windows "$stage/build/windows/RearguardStudy.exe"
+  [ -f "$stage/build/windows/rearguard_godot.dll" ] || { echo "export-study: library missing from the Windows export" >&2; exit 1; }
+fi
 
 # 6. Licence notices: the engine's and the Rust crates compiled into the extension.
 #    Export templates cannot run scripts (official builds disable --script), so the
@@ -177,7 +195,7 @@ python3 "$repo/scripts/study-export/rust_notices.py" "$repo" > "$stage/rust-noti
 
 # 7. Zip each build with the participant README, the notices and Rearguard's licence.
 sed "s|@RELEASE@|$release|" "$repo/scripts/study-export/README.txt" > "$stage/README.txt"
-for p in linux windows; do
+for p in "${platforms[@]}"; do
   cp "$stage/README.txt" "$notices" "$repo/LICENSE-MIT" "$repo/LICENSE-APACHE" "$stage/build/$p/"
   python3 - "$stage/build/$p" "$out/rearguard-study-$release-$p-x86_64.zip" "rearguard-study-$release-$p" <<'EOF'
 import os, sys, zipfile
@@ -194,7 +212,7 @@ done
 # The kept builds are exactly what the zips hold.
 if [ -n "$keep" ]; then
   mkdir -p "$keep"
-  cp -R "$stage/build/linux" "$stage/build/windows" "$keep/"
+  for p in "${platforms[@]}"; do cp -R "$stage/build/$p" "$keep/"; done
 fi
 
 # 8. Sizes.
@@ -202,7 +220,7 @@ report="$out/build-sizes.md"
 {
   echo "| Build | File | Size (bytes) |"
   echo "|-------|------|--------------|"
-  for p in linux windows; do
+  for p in "${platforms[@]}"; do
     for f in "$stage/build/$p"/*; do
       echo "| $p | $(basename "$f") | $(wc -c < "$f" | tr -d ' ') |"
     done
@@ -214,4 +232,4 @@ cat "$report"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   { echo "### Study build sizes ($release)"; echo; cat "$report"; } >> "$GITHUB_STEP_SUMMARY"
 fi
-echo "export-study: wrote $out/rearguard-study-$release-{linux,windows}-x86_64.zip"
+for p in "${platforms[@]}"; do echo "export-study: wrote $out/rearguard-study-$release-$p-x86_64.zip"; done

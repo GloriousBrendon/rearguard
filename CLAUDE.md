@@ -12,8 +12,10 @@ of the cheat chain. The server holds the seeds and watches who reacts. Detection
 rate and false-positive rate are always reported together, never one without the
 other.
 
-The repository is private, on a personal GitHub account. Licensed MIT OR Apache-2.0
-(decision D3).
+The repository is public, on a personal GitHub account. Licensed MIT OR Apache-2.0
+(decision D3). It is an early prototype: `README.md`, "Status and limits", says what
+exists and what the results mean, and must stay true. Bypasses and vulnerabilities are
+reported privately (`SECURITY.md`); `CONTRIBUTING.md` lists the checks.
 
 ## Decisions
 
@@ -29,6 +31,8 @@ The repository is private, on a personal GitHub account. Licensed MIT OR Apache-
   and inherited by every crate; every first-party source file carries an SPDX header.
   Third-party and vendored code keeps its own licence (the gdext crates stay MPL-2.0,
   D10). The dependency policy in `deny.toml` is unchanged by D3.
+- **D4 (name):** the project keeps the name Rearguard. It is not affiliated with the
+  Re:Guard anti-cheat research project, and the README says so.
 - **D5 (seed delivery):** the drift API is built around epochs: the drift is a pure
   function of an epoch seed and a time index. v0 uses a single epoch covering the whole
   match; epoch length is configuration.
@@ -37,6 +41,13 @@ The repository is private, on a personal GitHub account. Licensed MIT OR Apache-
   which are MPL-2.0. They are reachable only from `rearguard-godot`. gdext's files are
   never modified; any change would be published as MPL-2.0 requires. Recorded in
   `deny.toml` and `docs/licence-notes.md`.
+- **D11 (Godot export-template components):** the third-party components compiled into
+  the official Godot release export templates are accepted for the study builds, with
+  their notices shipped in every build (`THIRD-PARTY-NOTICES.txt`). This covers the
+  non-permissive or credit-requiring ones too: Mozilla's CA certificate bundle
+  (MPL-2.0, unmodified data, unused by the study), FreeType (FTL), the fonts (OFL-1.1)
+  and the Godot logo (CC-BY-4.0). The templates are used unmodified. D11 is about
+  distributed binaries, not crates: `deny.toml` is unchanged by it.
 
 ## Constraints
 
@@ -80,6 +91,13 @@ The repository is private, on a personal GitHub account. Licensed MIT OR Apache-
   third-party or vendored code. The licence texts in `LICENSE-MIT` and `LICENSE-APACHE`
   are the unmodified originals.
 - Work goes on a branch with a pull request, never straight to `main`.
+- The repository is public: nothing secret or personal is committed, and CI never
+  uploads a study key or a build that packs one. Study releases for volunteers are built
+  locally with a key kept outside the repository
+  (`docs/study/facilitator-instructions.md`). The only study build CI uploads packs the
+  public test key (`demo/tests/public-test-key.hex`), for the Windows smoke job.
+- Every action in the workflow is pinned to a full commit SHA, with the version in a
+  comment.
 
 ## Crate map
 
@@ -116,8 +134,9 @@ The detector evaluation (task 1.12; not part of CI's checks on the code, about a
 cargo xtask eval --seed N        # options and outputs: crates/xtask/README.md
 ```
 
-CI: `.github/workflows/ci.yml`, on every branch push (so pull requests show the
-runs as checks). fmt, clippy and tests run on `ubuntu-latest` and
+CI: `.github/workflows/ci.yml`, on pushes to `main`, on every pull request and on
+request (`workflow_dispatch`); a pull request from a branch of this repository runs
+once. fmt, clippy and tests run on `ubuntu-latest` and
 `windows-latest` with build caching; the dependency policy job (cargo-deny plus
 the Godot ban) runs on Linux only, because both evaluate the lockfile graph for
 every target platform and give the same answer on any host. The `licence headers` job
@@ -132,7 +151,10 @@ SHA-512 (`GODOT_ZIP_SHA512`) are pinned in the workflow, and the checksum is
 verified on every run, so a mismatch fails the job. The zip is cached, keyed on
 both values. After the import and before the tests, the job builds the Rust extension
 (`cargo build --locked -p rearguard-godot`) and sets `REARGUARD_REQUIRE_EXTENSION=1`,
-so the extension tests fail rather than skip if it does not load. The Linux job then
+so the extension tests fail rather than skip if it does not load. The import goes
+through `scripts/godot-import.sh`, which fails if Godot prints any error other than the
+missing extension library. The test runner fails if fewer tests ran than
+`demo/tests/expected_test_count.txt` says; raise that number when adding tests. The Linux job then
 records the aim range's test bots (`scripts/record-test-bots.sh`) and runs
 `cargo xtask eval --strict` on the recordings, so a recording that no longer replays
 fails the job. Import comes first
@@ -141,7 +163,7 @@ because Godot 4.7.2 crashes on shutdown after a first import that loads a GDExte
 use the 4.7.2 binary as `godot`:
 
 ```sh
-godot --headless --path demo --import          # once per fresh checkout, BEFORE the build
+scripts/godot-import.sh godot                  # once per fresh checkout, BEFORE the build
 cargo build -p rearguard-godot -p rearguard-server   # the GDExtension library and the server the live-loop tests run
 REARGUARD_REQUIRE_EXTENSION=1 godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
 ```
@@ -151,15 +173,19 @@ To bump Godot, change `GODOT_VERSION` and every pinned checksum (`GODOT_ZIP_SHA5
 come from the release's `SHA512-SUMS.txt`. The full steps are in `demo/README.md`, under
 "CI".
 
-Study builds (task 1.9a): the `study build (export, linux smoke)` job exports the
-volunteers' Linux and Windows builds (`scripts/export-study.sh`) with the official
-4.7.2 release templates (SHA-512 checked every run), a fresh study key per run, and the
-release DLL from `godot tests (windows)`. It smoke-tests the Linux build
-(`scripts/smoke-study-build.sh`), runs `cargo xtask eval --strict --allow-test-exports`
-on the export the smoke test wrote (so a change to the export format that the evaluation
-cannot read fails the job), and uploads the builds, sizes and key as artifacts.
-`study build (windows smoke)` smoke-tests the Windows build. The key is never committed
-and goes to the facilitator only (`docs/study/facilitator-instructions.md`).
+Study builds (task 1.9a): CI checks that the study build still exports and works; it
+makes no releases. The `study build (export, linux smoke)` job exports the Linux build
+(`scripts/export-study.sh --only linux`) with the official 4.7.2 release templates
+(SHA-512 checked every run) and a throwaway key made in the job. It smoke-tests that
+build (`scripts/smoke-study-build.sh`), runs
+`cargo xtask eval --strict --allow-test-exports` on the export the smoke test wrote (so a
+change to the export format that the evaluation cannot read fails the job), then deletes
+the key and the build. Neither is uploaded. It also exports the Windows build
+(`--only windows`) with the release DLL from `godot tests (windows)` and the public test
+key, and uploads it for one day; `study build (windows smoke)` smoke-tests it with the
+key from the checkout. Releases for volunteers are built locally, with a key that is
+never committed and stays with the facilitator
+(`docs/study/facilitator-instructions.md`).
 
 ## Third-party dependencies
 
@@ -210,5 +236,5 @@ MIT/Expat, BSD-2-Clause, BSD-3-Clause, Apache-2.0, Zlib, Unlicense, MIT-0, CC0-1
 BSL-1.0, Unicode, X11, IJG, and the HarfBuzz and glslang licences; also FreeType under
 FTL (BSD-style with a credit clause), fonts under OFL-1.1, the Godot logo under
 CC-BY-4.0, and Mozilla's CA certificate bundle under **MPL-2.0** (unmodified data,
-unused by the study; no decision recorded yet). Details and the notices shipped in each
-build: `docs/licence-notes.md`.
+unused by the study). All accepted by decision D11, with the notices shipped. Details
+and the notices shipped in each build: `docs/licence-notes.md`.

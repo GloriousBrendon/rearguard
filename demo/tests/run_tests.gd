@@ -4,9 +4,13 @@
 ## any failure:
 ##   godot --headless --path demo --fixed-fps 120 --script res://tests/run_tests.gd
 ## Test methods may be coroutines (use await); the runner awaits each one.
+## It also fails if fewer tests ran than tests/expected_test_count.txt says, so tests
+## cannot disappear unnoticed (a renamed file, a method that lost its test_ prefix).
+## Raise that number when adding tests.
 extends SceneTree
 
 const TEST_DIR := "res://scripts"
+const EXPECTED_COUNT_FILE := "res://tests/expected_test_count.txt"
 
 
 func _initialize() -> void:
@@ -43,4 +47,16 @@ func _run() -> void:
 					print("        " + f)
 				failed.append("%s::%s" % [file, method_name])
 	print("\n%d tests, %d failed" % [total, failed.size()])
-	quit(1 if not failed.is_empty() or total == 0 else 0)
+	var expected := _expected_count()
+	var enough := expected > 0 and total >= expected
+	if expected <= 0:
+		print("FAIL  %s is missing or holds no positive number" % EXPECTED_COUNT_FILE)
+	elif not enough:
+		print("FAIL  %d tests ran, expected at least %d (%s)" % [total, expected, EXPECTED_COUNT_FILE])
+	quit(1 if not failed.is_empty() or not enough else 0)
+
+
+## The least number of tests that must run, or 0 if the file is missing or malformed.
+func _expected_count() -> int:
+	var text := FileAccess.get_file_as_string(EXPECTED_COUNT_FILE).strip_edges()
+	return text.to_int() if text.is_valid_int() else 0

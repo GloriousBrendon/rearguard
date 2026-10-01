@@ -69,7 +69,8 @@ call in `timeout` (see "CI").
 ## CI
 
 The `godot tests (linux)` and `godot tests (windows)` jobs in
-`.github/workflows/ci.yml` run this test suite on every branch push, on
+`.github/workflows/ci.yml` run this test suite on every pull request and every push to
+`main`, on
 `ubuntu-latest` and `windows-latest`. They are independent of the Rust jobs and show
 as their own checks. The Windows job runs the same steps in Git Bash with the
 official `Godot_v<version>_win64.exe.zip` (its console wrapper, so output reaches the
@@ -83,8 +84,12 @@ builds").
 2. It checks the zip against the pinned SHA-512 with `sha512sum --check` on
    every run, cached or not. A mismatch fails the job.
 3. It unpacks the zip, prints `godot --version`, runs the one-time `--import`
-   (`timeout 300`), then the test command above (`timeout 600`). The job fails
-   if any test fails, if a test file does not compile, or if no tests run.
+   through `scripts/godot-import.sh` (`timeout 300`), then the test command above
+   (`timeout 600`). The import fails if Godot prints any error other than the missing
+   extension library, which is expected at that point. The job fails if any test
+   fails, if a test file does not compile, or if fewer tests run than
+   `tests/expected_test_count.txt` says. Raise that number when you add tests; a
+   pull request that lowers it has to say why.
 
 The job also installs the pinned Rust toolchain. Between the import and the tests it
 builds the extension and the server (`cargo build --locked -p rearguard-godot -p
@@ -433,13 +438,16 @@ checks above are therefore study options, not scripts.
    with the drift re-derived from the facilitator's copy of the key, which proves that
    copy is the key in the build.
 
-In CI, `study build (export, linux smoke)` exports both builds from a fresh key per
-run, smoke-tests the Linux build, and uploads the builds, their sizes and the key as
-artifacts. `study build (windows smoke)` runs the smoke test on the Windows build. The
-Windows DLL comes from `godot tests (windows)`.
+CI makes no releases and uploads no study key. `study build (export, linux smoke)`
+exports the Linux build (`--only linux`) with a throwaway key made in the job,
+smoke-tests it, and deletes the key and the build. It exports the Windows build
+(`--only windows`) with the public test key (`tests/public-test-key.hex`) and uploads
+only that, for one day; `study build (windows smoke)` runs the smoke test on it with the
+key from the checkout. The Windows DLL comes from `godot tests (windows)`. Releases for
+volunteers are built locally (`docs/study/facilitator-instructions.md`).
 
 Sizes (CI run 36765443315, release `r44-d93e066`, 2026-09-30; every run prints its sizes
-in the job summary and the `study-build-sizes` artifact):
+in the job summary):
 
 | File | Linux (bytes) | Windows (bytes) |
 |------|---------------|-----------------|

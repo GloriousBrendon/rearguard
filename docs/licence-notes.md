@@ -31,7 +31,8 @@ Decision D10 accepts a narrow exception:
   (the published crates) available under MPL-2.0 and keep its notices. Our own files
   are not affected.
 
-No other licence exceptions exist.
+No other licence exceptions exist for crates. The Godot export templates in the study
+builds are covered by decision D11, below.
 
 ## Study builds: Godot export templates (task 1.9a)
 
@@ -55,8 +56,12 @@ against the release's SHA-512). These are distributed binaries, not crates, so
   - **CA certificates** (Mozilla's root store, as data): **MPL-2.0**, file-level weak
     copyleft on unmodified data. The builds never use it (they make no network
     connections), but it is compiled into the templates. This is outside the `deny.toml`
-    policy, which covers crates only, and has no recorded decision yet (see the open
-    question in the task 1.9a report).
+    policy, which covers crates only.
+
+**Decision D11** accepts these components, including FreeType, the fonts, the logo and
+the CA certificate bundle, for the study builds. The templates are used unmodified, and
+every build ships the notices below. `deny.toml` is unchanged: it covers crates, and no
+crate gains an exception from D11.
 
 Every build ships Rearguard's own licence texts (`LICENSE-MIT`, `LICENSE-APACHE`) and
 `THIRD-PARTY-NOTICES.txt`:
