@@ -1,8 +1,10 @@
 # Drift study: facilitator instructions
 
-One session per participant, about 25 minutes: consent, 6 one-minute rounds of plain
-play, then 20 blind A/B comparisons of two 15-second rounds each. Protocol:
-`demo/study/protocol.json` (drift amplitudes 0, 0.25, 0.5, 1 and 2 %).
+One session per participant, about 20 minutes (16 minutes of play plus clicking between
+rounds): consent, 6 one-minute rounds of plain play, then 20 blind A/B comparisons of
+two 15-second rounds each. Protocol: `demo/study/protocol.json` (drift amplitudes 0,
+0.25, 0.5, 1 and 2 %). There are no countdowns or timed pauses: every screen between
+rounds waits for a click, and a round's clock runs only while the mouse is captured.
 
 Volunteers run a **study build** on their own computer (Linux or Windows, x86_64). They
 need no Godot, Rust or repository. Nothing leaves their machine automatically: at the
@@ -11,9 +13,11 @@ end the build writes one zip, and the participant decides whether to send it to 
 ## 1. Make a release
 
 A *release* is one pair of builds (Linux and Windows) plus the *study key* packed into
-both. Every release has its own key and a label such as `2026-10-a`, which each export
-records. Use one release for the whole study if you can; if you make a new one, keep
-every release's key.
+both. Every release has its own key and a label, which each export records. The label
+is `YYYY-MM-letter-shorthash`: the month, a letter counting that month's releases, and
+the 7-digit hash of the commit it was built from, for example `2026-10-a-06ec84a`. Use
+one release for the whole study if you can; if you make a new one, keep every release's
+key.
 
 You build releases yourself, on your own machine, with a key that never leaves it. The
 repository is public, and so is everything its CI produces, so **CI never makes a
@@ -30,8 +34,20 @@ release**: it uploads no key and no build that packs a real key.
   `cargo build --release --locked -p rearguard-godot` on Linux, and the same on Windows,
   with the resulting `rearguard_godot.dll` copied to `target/release/` on the Linux
   machine. Build both from the same commit.
+
+  Without a Windows machine, take the DLL from CI instead: the `godot tests (windows)`
+  job uploads it as the artifact `rearguard-godot-windows-release` (it holds no key).
+  Use the run for the commit you are releasing:
+
+  ```sh
+  gh run list --branch main --workflow ci.yml --limit 1     # the run's id and commit
+  gh run download RUN_ID -n rearguard-godot-windows-release -D target/release
+  ```
+
+  The artifact **expires after one day**, so run CI shortly before cutting a release
+  (`gh workflow run ci.yml --ref main`, or re-run the latest run on `main`).
 - A folder outside the repository for the key and the builds (below, `~/study`), which
-  only you can read.
+  only you can read: mode 700 for the folder, mode 600 for the key file.
 
 ### Build and test it
 
@@ -42,11 +58,35 @@ scripts/godot-import.sh godot                                      # before buil
 cargo build --locked -p rearguard-godot -p rearguard-server        # the editor's extension, and the key tool
 mkdir -p ~/study && chmod 700 ~/study
 target/debug/rearguard-server gen-secret ~/study/study-key.hex     # a fresh key for this release; never overwrites
+chmod 600 ~/study/study-key.hex                                    # already so on Linux; see below
 scripts/export-study.sh --godot godot --templates ~/godot-templates \
   --study-key ~/study/study-key.hex --release my-label --out ~/study/builds --keep-build ~/study/unzipped
 scripts/smoke-study-build.sh --build ~/study/unzipped/linux --godot godot \
+  --key ~/study/study-key.hex --release my-label --keep-export ~/study/self-test
+```
+
+`gen-secret` prints one line, `rearguard-server: wrote a new master secret to PATH`, and
+never the key itself. On Linux it creates the file with mode 600; on Windows the file
+gets the folder's permissions. It fails rather than overwrite an existing file.
+
+The smoke test and the check tool run the Godot **editor** on `demo/`, and the editor
+loads the debug extension library, `target/debug/librearguard_godot.so`
+(`demo/rearguard.gdextension`). The check replays every session with the extension's
+probe, so without the library it stops with "the Rust extension is not loaded".
+`scripts/godot-import.sh` deletes that library, which is why the `cargo build` comes
+after the import; build it again after any later import.
+
+`--keep-export` keeps the export that the build's `--self-test` run wrote. It is marked
+as automated, so check it **without** `--human`:
+
+```sh
+godot --headless --path demo --script res://tools/check_study_export.gd -- \
+  --zip ~/study/self-test/rearguard-study-build-smoke-P-XXXXXXXXXX.zip \
   --key ~/study/study-key.hex --release my-label
 ```
+
+With `--human` the same export fails ("a participant's run (not automated)"), as it
+should: `--human` is only for zips that participants send back (section 5).
 
 `~/study/builds` then holds:
 
@@ -122,15 +162,29 @@ release's exports with care in the analysis.
 2. Send them the matching zip, for example as a link to a private file share, and
    nothing else. Do not send the key or the other build.
 3. Tell them:
-   - unzip it anywhere and read `README.txt` (starting it, removing it);
+   - unzip it anywhere and read `README.txt` (starting it, removing it). On Windows:
+     right-click the zip, choose "Extract All", then open the extracted folder; the
+     build does not run from inside the zip;
    - the build is **not code-signed**: Windows SmartScreen may warn ("More info", then
      "Run anyway"). On Linux they may need `chmod +x RearguardStudy.x86_64`;
-   - use a wired mouse if they have one, turn off pointer acceleration in the system
-     settings, run it full screen, and close overlays and screen recorders;
-   - set aside about 25 minutes without interruptions;
-   - if they cannot tell which round felt different, they should guess.
+   - use a wired mouse if they have one, play with their usual mouse settings and
+     change nothing, and close overlays and screen recorders;
+   - the study opens in a 1280x720 window. They must not resize or maximise it, so that
+     everyone sees the same view;
+   - set aside about 20 minutes without interruptions;
+   - if they cannot tell which round felt different, they should guess;
+   - send back the export zip exactly as the build wrote it: not renamed, not opened
+     and saved again, nothing in it changed.
 4. Do not ask for their name or contact details as part of the study, and do not keep a
    list linking people to participant IDs.
+
+Mouse settings differ between participants, and so does what the build receives. On
+native Wayland, Godot 4.7.2 delivers the compositor's **accelerated** movement, not raw
+counts; on X11, XWayland and Windows it reads raw counts (`demo/README.md`, "Raw input
+path"; the Windows and Wayland rows come from the engine source, not from a
+measurement). Each export's manifest records the `display_driver`. The analysis must
+not pool sessions from different display drivers without checking that they are
+comparable.
 
 ## 4. What the participant sees
 
