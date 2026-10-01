@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS evidence (
     session_id   INTEGER NOT NULL REFERENCES sessions(session_id),
     scope        TEXT    NOT NULL,   -- 'window' or 'session'
     window_index INTEGER NOT NULL,   -- -1 for the session scope
-    statistic    TEXT    NOT NULL,   -- 'error' or 'steps'
+    statistic    TEXT    NOT NULL,   -- 'error', 'steps', 'change' or 'spray'
     start_ms INTEGER, end_ms INTEGER, pairs INTEGER,
     r REAL, slope REAL, slope_se REAL, residual_sd REAL, kappa REAL,
     z REAL, score REAL, confidence REAL, flagged INTEGER,
@@ -159,7 +159,7 @@ impl Store {
         })
     }
 
-    /// Stores completed evidence windows (both statistics each).
+    /// Stores completed evidence windows (each statistic of [`reported`]).
     ///
     /// # Errors
     /// SQLite errors.
@@ -173,8 +173,9 @@ impl Store {
             let tx = c.transaction()?;
             for (i, w) in windows.iter().enumerate() {
                 let index = to_i64((first_index + i) as u64);
-                insert_evidence(&tx, session_id, "window", index, "error", &w.error)?;
-                insert_evidence(&tx, session_id, "window", index, "steps", &w.steps)?;
+                for (name, e) in reported(w) {
+                    insert_evidence(&tx, session_id, "window", index, name, e)?;
+                }
             }
             tx.commit()
         })
@@ -198,8 +199,9 @@ impl Store {
                 "UPDATE sessions SET status = ?2, ended_ms = ?3, records = ?4 WHERE session_id = ?1",
                 params![id, verdict.status.name(), to_i64(ended_ms), to_i64(verdict.records)],
             )?;
-            insert_evidence(&tx, verdict.session_id, "session", -1, "error", &session.error)?;
-            insert_evidence(&tx, verdict.session_id, "session", -1, "steps", &session.steps)?;
+            for (name, e) in reported(session) {
+                insert_evidence(&tx, verdict.session_id, "session", -1, name, e)?;
+            }
             tx.execute(
                 "INSERT OR REPLACE INTO verdicts (session_id, status, score, confidence, flagged, records, shots,
                      engagements, angle_mismatches, windows, flagged_windows)
@@ -358,6 +360,29 @@ impl Store {
     }
 }
 
+/// The statistics a verdict covers and the store keeps: the fire-time and
+/// step-response statistics always, and the task-1.3a ones (drift change, per-shot
+/// spray) once they have pairs. Those have none unless the detector configuration
+/// enables them, so a configuration without them stores and scores exactly as before.
+#[must_use]
+pub fn reported(report: &Report) -> Vec<(&'static str, &Evidence)> {
+    report
+        .statistics()
+        .into_iter()
+        .filter(|(name, e)| matches!(*name, "error" | "steps") || e.pairs > 0)
+        .collect()
+}
+
+/// A verdict's score and confidence: the largest over [`reported`] statistics.
+#[must_use]
+pub fn verdict_score(report: &Report) -> (f64, f64) {
+    reported(report)
+        .into_iter()
+        .fold((f64::NEG_INFINITY, f64::NEG_INFINITY), |(s, c), (_, e)| {
+            (s.max(e.score), c.max(e.confidence))
+        })
+}
+
 fn insert_evidence(
     c: &Connection,
     session_id: u64,
@@ -419,10 +444,30 @@ mod tests {
         Report {
             error: evidence(score, true),
             steps: evidence(-1.0, false),
+            // Not configured: no pairs, not stored.
+            change: Evidence {
+                pairs: 0,
+                ..evidence(0.0, false)
+            },
+            spray: evidence(2.0, false),
             shots: 10,
             engagements: 5,
             angle_mismatches: 0,
         }
+    }
+
+    #[test]
+    fn verdicts_cover_the_statistics_with_evidence() {
+        // Unconfigured statistics have no pairs: a negative score stays negative
+        // rather than rising to their neutral zero.
+        let mut r = report(-3.0);
+        r.spray.pairs = 0;
+        let names: Vec<&str> = reported(&r).into_iter().map(|(n, _)| n).collect();
+        assert_eq!(names, ["error", "steps"]);
+        assert_eq!(verdict_score(&r).0, -1.0);
+        // A configured one counts.
+        let r = report(-3.0);
+        assert_eq!(verdict_score(&r), (2.0, 0.99));
     }
 
     #[test]
@@ -446,7 +491,8 @@ mod tests {
         store
             .add_windows((1 << 62) + 5, 0, &[report(3.0), report(4.0)])
             .unwrap();
-        assert_eq!(store.window_rows((1 << 62) + 5).unwrap(), 4);
+        // Error, steps and spray per window; change has no pairs.
+        assert_eq!(store.window_rows((1 << 62) + 5).unwrap(), 6);
         assert_eq!(
             store.verdict((1 << 62) + 5).unwrap(),
             None,

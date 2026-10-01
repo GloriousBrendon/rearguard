@@ -26,13 +26,18 @@ engine crate, directly or transitively. `unsafe` code is forbidden.
   byte and a postcard message. It covers session seeds, telemetry chunks with replay
   numbers, resume and verdicts; `rearguard-server` speaks it.
 - `detect`: the server-side input-probe detector. It streams one player's telemetry,
-  replays it with and without the drift, and scores two statistics as signed
+  replays it with and without the drift, and scores its statistics as signed
   log-likelihood ratios with confidences, per window and per session:
   - fire-time error against drift effect, tested against a strength bound (κ);
-  - the per-frame step response to the drift.
+  - the per-frame step response to the drift;
+  - (task 1.3a, optional) fire-time error against the drift's change since the
+    previous shot, for cheats that learn the drift from their own moves;
+  - (task 1.3a, optional) per-shot error changes within a spray burst against what a
+    fixed-pattern recoil macro would get wrong.
 
   Thresholds come only from `DetectorConfig`, which has no defaults and is never sent
-  to a client. Results: `docs/detector-1.3.md`.
+  to a client; the two optional statistics run only when it configures them. Results:
+  `docs/detector-1.3.md` and `docs/detector-1.3a.md`.
 
 Benchmarks: `cargo bench -p rearguard-core --bench probe`. Shape comparison:
 `cargo run --release -p rearguard-core --example compare_shapes`.

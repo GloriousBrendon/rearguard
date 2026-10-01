@@ -65,11 +65,12 @@ impl Live {
     fn verdict(&self, session_id: u64, status: SessionStatus) -> VerdictReport {
         let s = self.detector.session();
         let windows = self.detector.windows();
+        let (score, confidence) = crate::store::verdict_score(&s);
         VerdictReport {
             session_id,
             status,
-            score: s.error.score.max(s.steps.score),
-            confidence: s.error.confidence.max(s.steps.confidence),
+            score,
+            confidence,
             flagged: s.flagged(),
             records: self.records,
             shots: s.shots,

@@ -23,21 +23,29 @@ use crate::seed::{SimRng, SimSeed};
 use crate::session::{Class, ModelParams, SessionSpec, run_session};
 use crate::world::Scenario;
 
+/// Number of detector statistics, in [`Report::statistics`] order.
+pub const STATISTICS: usize = 4;
+
+/// Each statistic's score in a report, in [`Report::statistics`] order.
+#[must_use]
+pub fn stat_scores(r: &Report) -> [f64; STATISTICS] {
+    r.statistics().map(|(_, e)| e.score)
+}
+
 /// One simulated player's detector output.
 #[derive(Clone, Debug)]
 pub struct Trace {
     /// Session evidence at each observation time (the state before the first record
     /// at or after that time).
     pub snapshots: Vec<Report>,
-    /// Highest fire-time score reached up to each observation time.
-    pub max_error: Vec<f64>,
-    /// Highest step-response score reached up to each observation time.
-    pub max_steps: Vec<f64>,
-    /// Every point where a running maximum score rose while still below
-    /// [`PATH_SCORE_CAP`]: (shots, engagements, fire-time score, step-response score).
-    /// Enough to find the first crossing of any threshold below the cap. Kept only when
+    /// Highest score of each statistic ([`Report::statistics`] order) reached up to
+    /// each observation time.
+    pub max: Vec<[f64; STATISTICS]>,
+    /// Every point where a statistic's running maximum score rose while still below
+    /// [`PATH_SCORE_CAP`]: (shots, engagements, every statistic's score). Enough to
+    /// find the first crossing of any thresholds below the cap. Kept only when
     /// requested (cheats), for time to detection.
-    pub path: Vec<(u32, u32, f32, f32)>,
+    pub path: Vec<(u32, u32, [f32; STATISTICS])>,
 }
 
 /// Scores above this never need a recorded path point: every calibrated threshold is
@@ -71,17 +79,15 @@ pub fn trace_session(
     let start_us = header.probe_start_us;
     let mut trace = Trace {
         snapshots: Vec::with_capacity(observe_ms.len()),
-        max_error: Vec::with_capacity(observe_ms.len()),
-        max_steps: Vec::with_capacity(observe_ms.len()),
+        max: Vec::with_capacity(observe_ms.len()),
         path: Vec::new(),
     };
-    let (mut max_error, mut max_steps) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let mut max = [f64::NEG_INFINITY; STATISTICS];
     let mut next = 0;
     for record in &session.records {
         while next < observe_ms.len() && record.ts_us() >= start_us + observe_ms[next] * 1_000 {
             trace.snapshots.push(detector.session());
-            trace.max_error.push(max_error);
-            trace.max_steps.push(max_steps);
+            trace.max.push(max);
             next += 1;
         }
         detector
@@ -89,24 +95,24 @@ pub fn trace_session(
             .expect("simulated telemetry is valid");
         if !matches!(record, Record::Move(_)) {
             let r = detector.session();
-            let rose = (r.error.score > max_error && max_error < PATH_SCORE_CAP)
-                || (r.steps.score > max_steps && max_steps < PATH_SCORE_CAP);
-            max_error = max_error.max(r.error.score);
-            max_steps = max_steps.max(r.steps.score);
+            let scores = stat_scores(&r);
+            let mut rose = false;
+            for (m, s) in max.iter_mut().zip(scores) {
+                rose |= s > *m && *m < PATH_SCORE_CAP;
+                *m = m.max(s);
+            }
             if keep_path && rose {
                 trace.path.push((
                     r.shots as u32,
                     r.engagements as u32,
-                    r.error.score as f32,
-                    r.steps.score as f32,
+                    scores.map(|s| s as f32),
                 ));
             }
         }
     }
     while next < observe_ms.len() {
         trace.snapshots.push(detector.session());
-        trace.max_error.push(max_error);
-        trace.max_steps.push(max_steps);
+        trace.max.push(max);
         next += 1;
     }
     trace
@@ -333,17 +339,92 @@ pub fn alternative_z(e: &Evidence, slope_bound: f64) -> (f64, f64) {
     (plain, slope)
 }
 
-/// First point on a cheat's path where the fire-time score passes `error_threshold` or
-/// the step-response score passes `steps_threshold`: (shots, engagements).
+/// First point on a cheat's path where any statistic's score passes its threshold
+/// ([`Report::statistics`] order; infinity for a statistic not used): (shots,
+/// engagements).
 #[must_use]
 pub fn first_detection(
-    path: &[(u32, u32, f32, f32)],
-    error_threshold: f64,
-    steps_threshold: f64,
+    path: &[(u32, u32, [f32; STATISTICS])],
+    thresholds: &[f64; STATISTICS],
 ) -> Option<(u32, u32)> {
     path.iter()
-        .find(|p| f64::from(p.2) > error_threshold || f64::from(p.3) > steps_threshold)
+        .find(|p| p.2.iter().zip(thresholds).any(|(s, t)| f64::from(*s) > *t))
         .map(|p| (p.0, p.1))
+}
+
+/// Detection rate of a union of statistics: a session is flagged when any statistic's
+/// score passes its own threshold, each calibrated on `human` at `fpr / statistics`
+/// (a union bound, so at most `fpr` of humans are flagged).
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnionRate {
+    /// Point estimate, 2.5th and 97.5th bootstrap percentiles, as in [`Rate`].
+    pub rate: f64,
+    /// 2.5th percentile.
+    pub low: f64,
+    /// 97.5th percentile.
+    pub high: f64,
+    /// Each statistic's threshold for the point estimate.
+    pub thresholds: Vec<f64>,
+    /// Fraction of `human` the union flags at those thresholds.
+    pub human_fpr: f64,
+}
+
+fn union_thresholds(human: &[Vec<f64>], fpr: f64) -> Vec<f64> {
+    let share = fpr / human.len().max(1) as f64;
+    human.iter().map(|h| threshold_at(h, share)).collect()
+}
+
+fn union_rate(sessions: &[Vec<f64>], thresholds: &[f64], pick: &[usize]) -> f64 {
+    let flagged = pick
+        .iter()
+        .filter(|&&j| sessions.iter().zip(thresholds).any(|(s, t)| s[j] > *t))
+        .count();
+    flagged as f64 / pick.len().max(1) as f64
+}
+
+/// Detection rate of `cheat` by the union of statistics at total false-positive rate
+/// `fpr`. `human[i]` and `cheat[i]` are statistic `i`'s scores, one per session, in
+/// session order. The bootstrap resamples sessions (all their statistics together) and
+/// re-calibrates every threshold each round.
+#[must_use]
+pub fn detection_rate_union(
+    human: &[Vec<f64>],
+    cheat: &[Vec<f64>],
+    fpr: f64,
+    rounds: usize,
+    rng: &mut SimRng,
+) -> UnionRate {
+    let (nh, nc) = (human[0].len(), cheat[0].len());
+    let all_h: Vec<usize> = (0..nh).collect();
+    let all_c: Vec<usize> = (0..nc).collect();
+    let thresholds = union_thresholds(human, fpr);
+    let rate = union_rate(cheat, &thresholds, &all_c);
+    let human_fpr = union_rate(human, &thresholds, &all_h);
+    let draw = |n: usize, rng: &mut SimRng| -> Vec<usize> {
+        (0..n)
+            .map(|_| (rng.next_u64() % n as u64) as usize)
+            .collect()
+    };
+    let mut boots: Vec<f64> = (0..rounds)
+        .map(|_| {
+            let ih = draw(nh, rng);
+            let resampled: Vec<Vec<f64>> = human
+                .iter()
+                .map(|h| ih.iter().map(|&j| h[j]).collect())
+                .collect();
+            let t = union_thresholds(&resampled, fpr);
+            union_rate(cheat, &t, &draw(nc, rng))
+        })
+        .collect();
+    boots.sort_by(f64::total_cmp);
+    let pick = |q: f64| boots[((boots.len() - 1) as f64 * q).round() as usize];
+    UnionRate {
+        rate,
+        low: pick(0.025),
+        high: pick(0.975),
+        thresholds,
+        human_fpr,
+    }
 }
 
 #[cfg(test)]
@@ -378,6 +459,33 @@ mod tests {
     }
 
     #[test]
+    fn union_splits_the_budget_and_flags_on_any_statistic() {
+        // Two statistics over 2000 humans: each flags at most 0.05% of them.
+        let human: Vec<Vec<f64>> = vec![
+            (0..2000).map(f64::from).collect(),
+            (0..2000).map(|i| f64::from((i * 7) % 2000)).collect(),
+        ];
+        // Cheats 0..100 pass the first statistic only, 100..150 the second only.
+        let cheat: Vec<Vec<f64>> = vec![
+            (0..200).map(|i| if i < 100 { 5e3 } else { 0.0 }).collect(),
+            (0..200)
+                .map(|i| if (100..150).contains(&i) { 5e3 } else { 0.0 })
+                .collect(),
+        ];
+        let mut rng = SimSeed::new(2).rng(0);
+        let r = detection_rate_union(&human, &cheat, 0.001, 200, &mut rng);
+        assert_eq!(r.rate, 0.75);
+        assert!(r.human_fpr <= 0.001, "{r:?}");
+        assert_eq!(r.thresholds, vec![1998.0, 1998.0]);
+        assert!(r.low <= 0.75 && r.high >= 0.75, "{r:?}");
+        let path = vec![(3, 1, [1.0, 0.0, 0.0, 0.0]), (9, 4, [1.0, 0.0, 0.0, 50.0])];
+        let inf = f64::INFINITY;
+        assert_eq!(first_detection(&path, &[0.5, inf, inf, inf]), Some((3, 1)));
+        assert_eq!(first_detection(&path, &[5.0, inf, inf, 10.0]), Some((9, 4)));
+        assert_eq!(first_detection(&path, &[5.0, inf, inf, inf]), None);
+    }
+
+    #[test]
     fn roc_runs_from_nothing_to_everything() {
         let points = roc(&[1.0, 2.0, 3.0], &[2.5, 4.0]);
         assert_eq!(points.first().map(|p| (p.1, p.2)), Some((0.0, 0.0)));
@@ -407,6 +515,8 @@ mod tests {
             min_pairs: 20,
             window_ms: 30_000,
             min_step_counts: 100.0,
+            change: None,
+            spray: None,
         };
         let plan = Plan {
             amplitudes_ppm: vec![5_000],
@@ -424,6 +534,7 @@ mod tests {
             assert_eq!(ga.3.len(), gb.3.len());
             for (ta, tb) in ga.3.iter().zip(&gb.3) {
                 assert_eq!(ta.snapshots, tb.snapshots);
+                assert_eq!(ta.max, tb.max);
                 assert_eq!(ta.path, tb.path);
                 assert_eq!(ta.snapshots.len(), 2);
             }

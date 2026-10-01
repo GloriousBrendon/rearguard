@@ -15,8 +15,8 @@ use std::process::ExitCode;
 
 use rearguard_core::detect::{DetectorConfig, Report};
 use rearguard_sim::evaluate::{
-    Plan, Results, alternative_z, detection_rate, first_detection, rate_above, roc, run, scores,
-    threshold_at,
+    Plan, Results, STATISTICS, alternative_z, detection_rate, detection_rate_union,
+    first_detection, rate_above, roc, run, scores, stat_scores, threshold_at,
 };
 use rearguard_sim::seed::SimSeed;
 use rearguard_sim::session::{Class, ModelParams};
@@ -255,8 +255,18 @@ fn evaluate(args: &Args) -> Result<(), String> {
                 let human = results.traces(ppm, Class::Human, scenario);
                 let t_err = threshold_at(&scores(human, k, error_score), args.fpr);
                 let t_steps = threshold_at(&scores(human, k, steps_score), args.fpr);
+                // Task 1.3a statistics, only when configured (so a 1.3 configuration
+                // writes exactly the 1.3 file).
+                let extra: String = applicable(&config, scenario)
+                    .into_iter()
+                    .skip(2)
+                    .map(|i| {
+                        let t = threshold_at(&scores(human, k, |r| stat_scores(r)[i]), args.fpr);
+                        format!(", \"{}_flag_score\": {t}", NAMES[i])
+                    })
+                    .collect();
                 thresholds_json.push(format!(
-                    "    {{\"amplitude_pct\": {}, \"observe_s\": {}, \"scenario\": \"{}\", \"error_flag_score\": {t_err}, \"steps_flag_score\": {t_steps}}}",
+                    "    {{\"amplitude_pct\": {}, \"observe_s\": {}, \"scenario\": \"{}\", \"error_flag_score\": {t_err}, \"steps_flag_score\": {t_steps}{extra}}}",
                     pct(ppm), secs(ms), scenario.name()
                 ));
             }
@@ -316,11 +326,11 @@ fn evaluate(args: &Args) -> Result<(), String> {
             let human = results.traces(ppm, Class::Human, scenario);
             let max_err: Vec<f64> = human
                 .iter()
-                .map(|t| t.max_error[last].max(t.snapshots[last].error.score))
+                .map(|t| t.max[last][0].max(t.snapshots[last].error.score))
                 .collect();
             let max_steps: Vec<f64> = human
                 .iter()
-                .map(|t| t.max_steps[last].max(t.snapshots[last].steps.score))
+                .map(|t| t.max[last][1].max(t.snapshots[last].steps.score))
                 .collect();
             let te = threshold_at(&max_err, args.fpr / 2.0);
             let ts = threshold_at(&max_steps, args.fpr / 2.0);
@@ -337,7 +347,9 @@ fn evaluate(args: &Args) -> Result<(), String> {
                 let found: Vec<(u32, u32)> = results
                     .traces(ppm, class, s)
                     .iter()
-                    .filter_map(|t| first_detection(&t.path, te, ts))
+                    .filter_map(|t| {
+                        first_detection(&t.path, &[te, ts, f64::INFINITY, f64::INFINITY])
+                    })
                     .collect();
                 let n = results.traces(ppm, class, s).len() as f64;
                 let mut shots: Vec<f64> = found.iter().map(|f| f64::from(f.0)).collect();
@@ -486,21 +498,369 @@ fn evaluate(args: &Args) -> Result<(), String> {
     }
     write(out("steps.csv"), steps_csv)?;
 
+    // 1.3a. The drift-change and per-shot spray statistics, when configured. A
+    // separate bootstrap stream, so every 1.3 output above is unchanged.
+    let extended = if config.change.is_some() || config.spray.is_some() {
+        let mut rng_new = seed.rng(0x0000_E0A1_0000_0001);
+        Some(task_13a(args, &config, &results, &mut rng_new)?)
+    } else {
+        None
+    };
+
     // 6. Plots.
     write(out("roc.svg"), roc_svg(&roc_curves, args.fpr, false))?;
     write(out("roc-steps.svg"), roc_svg(&roc_curves, args.fpr, true))?;
 
     // 7. Monotonicity across the grid (criterion 4), and the summary.
-    write(
-        out("summary.md"),
-        summary(args, &results, &det_rows, &ttd_rows, &sep_rows, &steps_rows),
-    )?;
+    let mut text = summary(args, &results, &det_rows, &ttd_rows, &sep_rows, &steps_rows);
+    if let Some(extended) = extended {
+        text.push_str(&extended);
+    }
+    write(out("summary.md"), text)?;
     eprintln!(
         "rearguard-eval: wrote {} in {:.0} s",
         args.out.display(),
         started.elapsed().as_secs_f64()
     );
     Ok(())
+}
+
+/// Statistic names, in `Report::statistics` order.
+const NAMES: [&str; STATISTICS] = ["error", "steps", "change", "spray"];
+
+/// Statistics a scenario's detector runs, as indices into `Report::statistics`: the
+/// fire-time and step-response statistics, plus the task-1.3a one when configured
+/// (drift change for flicks, per-shot spray for sprays).
+fn applicable(config: &DetectorConfig, scenario: Scenario) -> Vec<usize> {
+    let mut v = vec![0, 1];
+    match scenario {
+        Scenario::Flick if config.change.is_some() => v.push(2),
+        Scenario::Spray if config.spray.is_some() => v.push(3),
+        _ => {}
+    }
+    v
+}
+
+/// (amplitude ppm, observation ms, statistic, class, rate, low, high).
+type NewDetRow = (u32, u64, String, Class, f64, f64, f64);
+
+/// Task 1.3a outputs: detection rates of each new statistic alone and of every
+/// statistic together (`any`), times to detection with every statistic, and the new
+/// statistics' evidence. Writes `detection-1.3a.csv`, `ttd-1.3a.csv` and
+/// `evidence-1.3a.csv`, and returns the summary section.
+fn task_13a(
+    args: &Args,
+    config: &DetectorConfig,
+    results: &Results,
+    rng: &mut rearguard_sim::seed::SimRng,
+) -> Result<String, String> {
+    let write = |name: &str, body: String| {
+        let path = args.out.join(name);
+        fs::write(&path, body).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    let pick = |i: usize| move |r: &Report| stat_scores(r)[i];
+
+    // Detection rates at the target FPR.
+    let mut det_csv = String::from(
+        "amplitude_pct,observe_s,statistic,class,scenario,fpr_target,thresholds,measured_human_fpr,detection_rate,ci_low,ci_high,humans,cheats\n",
+    );
+    let mut det: Vec<NewDetRow> = Vec::new();
+    for &ppm in &AMPLITUDES_PPM {
+        for (k, &ms) in OBSERVE_MS.iter().enumerate() {
+            for (class, scenario) in cheats() {
+                let human = results.traces(ppm, Class::Human, scenario);
+                let cheat = results.traces(ppm, class, scenario);
+                let stats = applicable(config, scenario);
+                let mut row = |name: String, rate: f64, low: f64, high: f64, t: &[f64], fp: f64| {
+                    let t: Vec<String> = t.iter().map(ToString::to_string).collect();
+                    let _ = writeln!(
+                        det_csv,
+                        "{},{},{name},{},{},{},{},{fp},{rate},{low},{high},{},{}",
+                        pct(ppm),
+                        secs(ms),
+                        class.name(),
+                        scenario.name(),
+                        args.fpr,
+                        t.join(";"),
+                        human.len(),
+                        cheat.len()
+                    );
+                    det.push((ppm, ms, name, class, rate, low, high));
+                };
+                for &i in &stats[2..] {
+                    let h = scores(human, k, pick(i));
+                    let c = scores(cheat, k, pick(i));
+                    let r = detection_rate(&h, &c, args.fpr, args.bootstrap, rng);
+                    let fp = rate_above(&h, r.threshold);
+                    row(
+                        NAMES[i].to_owned(),
+                        r.rate,
+                        r.low,
+                        r.high,
+                        &[r.threshold],
+                        fp,
+                    );
+                }
+                let h: Vec<Vec<f64>> = stats.iter().map(|&i| scores(human, k, pick(i))).collect();
+                let c: Vec<Vec<f64>> = stats.iter().map(|&i| scores(cheat, k, pick(i))).collect();
+                let u = detection_rate_union(&h, &c, args.fpr, args.bootstrap, rng);
+                row(
+                    "any".to_owned(),
+                    u.rate,
+                    u.low,
+                    u.high,
+                    &u.thresholds,
+                    u.human_fpr,
+                );
+            }
+        }
+    }
+    write("detection-1.3a.csv", det_csv)?;
+
+    // Time to detection with every statistic running, FPR split evenly among them.
+    let last = OBSERVE_MS.len() - 1;
+    let mut ttd_csv = String::from(
+        "amplitude_pct,class,scenario,statistics,sequential_thresholds,measured_human_sequential_fpr,detected_fraction,median_shots,p90_shots,median_engagements,p90_engagements,median_matches\n",
+    );
+    let mut ttd = Vec::new();
+    for &ppm in &AMPLITUDES_PPM {
+        for scenario in [Scenario::Flick, Scenario::Spray] {
+            let stats = applicable(config, scenario);
+            let human = results.traces(ppm, Class::Human, scenario);
+            let peak = |t: &rearguard_sim::evaluate::Trace, i: usize| {
+                t.max[last][i].max(stat_scores(&t.snapshots[last])[i])
+            };
+            let mut thresholds = [f64::INFINITY; STATISTICS];
+            for &i in &stats {
+                let h: Vec<f64> = human.iter().map(|t| peak(t, i)).collect();
+                thresholds[i] = threshold_at(&h, args.fpr / stats.len() as f64);
+            }
+            let fp = human
+                .iter()
+                .filter(|t| stats.iter().any(|&i| peak(t, i) > thresholds[i]))
+                .count() as f64
+                / human.len() as f64;
+            let names: Vec<&str> = stats.iter().map(|&i| NAMES[i]).collect();
+            let shown: Vec<String> = stats.iter().map(|&i| thresholds[i].to_string()).collect();
+            for (class, s) in cheats() {
+                if s != scenario {
+                    continue;
+                }
+                let traces = results.traces(ppm, class, s);
+                let found: Vec<(u32, u32)> = traces
+                    .iter()
+                    .filter_map(|t| first_detection(&t.path, &thresholds))
+                    .collect();
+                let detected = found.len() as f64 / traces.len() as f64;
+                let mut shots: Vec<f64> = found.iter().map(|f| f64::from(f.0)).collect();
+                let mut eng: Vec<f64> = found.iter().map(|f| f64::from(f.1)).collect();
+                let (ms, ps) = (median(&mut shots), quantile(&mut shots, 0.9));
+                let (me, pe) = (median(&mut eng), quantile(&mut eng, 0.9));
+                let _ = writeln!(
+                    ttd_csv,
+                    "{},{},{},{},{},{fp},{detected},{ms},{ps},{me},{pe},{}",
+                    pct(ppm),
+                    class.name(),
+                    s.name(),
+                    names.join("+"),
+                    shown.join(";"),
+                    me / args.per_match
+                );
+                ttd.push((ppm, class, fp, detected, me, pe));
+            }
+        }
+    }
+    write("ttd-1.3a.csv", ttd_csv)?;
+
+    // The new statistics' evidence: medians per class, and the humans' upper kappa
+    // tail (what the kappa bound must sit above).
+    let mut ev_csv = String::from(
+        "amplitude_pct,observe_s,statistic,class,scenario,median_pairs,median_slope,median_residual_sd,median_kappa,p99_kappa,p999_kappa,median_z\n",
+    );
+    let mut ev_rows = Vec::new();
+    for &ppm in &AMPLITUDES_PPM {
+        for (k, &ms) in OBSERVE_MS.iter().enumerate() {
+            let groups = std::iter::once((Class::Human, Scenario::Flick))
+                .chain(std::iter::once((Class::Human, Scenario::Spray)))
+                .chain(cheats());
+            for (class, scenario) in groups {
+                let Some(&i) = applicable(config, scenario).get(2) else {
+                    continue;
+                };
+                let t = results.traces(ppm, class, scenario);
+                let field = |f: fn(&rearguard_core::detect::Evidence) -> f64| -> Vec<f64> {
+                    t.iter()
+                        .map(|x| f(x.snapshots[k].statistics()[i].1))
+                        .collect()
+                };
+                let mut kappa = field(|e| e.kappa);
+                let row = (
+                    median(&mut field(|e| e.pairs as f64)),
+                    median(&mut field(|e| e.slope)),
+                    median(&mut field(|e| e.residual_sd)),
+                    median(&mut kappa),
+                    quantile(&mut kappa, 0.99),
+                    quantile(&mut kappa, 0.999),
+                    median(&mut field(|e| e.z)),
+                );
+                let _ = writeln!(
+                    ev_csv,
+                    "{},{},{},{},{},{},{},{},{},{},{},{}",
+                    pct(ppm),
+                    secs(ms),
+                    NAMES[i],
+                    class.name(),
+                    scenario.name(),
+                    row.0,
+                    row.1,
+                    row.2,
+                    row.3,
+                    row.4,
+                    row.5,
+                    row.6
+                );
+                ev_rows.push((ppm, ms, NAMES[i], class, row));
+            }
+        }
+    }
+    write("evidence-1.3a.csv", ev_csv)?;
+
+    // Summary section.
+    let mut s = String::new();
+    let _ = writeln!(
+        s,
+        "## Task 1.3a: drift-change and per-shot spray statistics\n"
+    );
+    let _ = writeln!(
+        s,
+        "Same sessions and the same calibration as above; a separate bootstrap stream, so every table above is unchanged. `change`: the drift-change statistic (flick), κ bound {}. `spray`: the per-shot spray statistic, κ bound {}. `any`: every statistic the scenario runs (flick: error, steps, change; spray: error, steps, spray), each with its own threshold at {}% ÷ the number of statistics, flagged when any passes (union bound: at most {}% of humans).\n",
+        config
+            .change
+            .map_or("-".to_owned(), |t| t.kappa_bound.to_string()),
+        config
+            .spray
+            .map_or("-".to_owned(), |t| t.kappa_bound.to_string()),
+        args.fpr * 100.0,
+        args.fpr * 100.0
+    );
+    let _ = writeln!(s, "### Detection rate at {}% FPR\n", args.fpr * 100.0);
+    let find = |ppm: u32, ms: u64, name: &str, class: Class| {
+        det.iter()
+            .find(|r| r.0 == ppm && r.1 == ms && r.2 == name && r.3 == class)
+    };
+    for (class, scenario) in cheats() {
+        let stats = applicable(config, scenario);
+        let mut names: Vec<&str> = stats[2..].iter().map(|&i| NAMES[i]).collect();
+        names.push("any");
+        let _ = writeln!(s, "**{}** ({} scenario)\n", class.name(), scenario.name());
+        let _ = writeln!(
+            s,
+            "| Amplitude | Statistic | 30 s | 2 min | 5 min | 15 min |\n|---|---|---|---|---|---|"
+        );
+        for &ppm in &AMPLITUDES_PPM {
+            for name in &names {
+                let cells: Vec<String> = OBSERVE_MS
+                    .iter()
+                    .map(|&ms| {
+                        find(ppm, ms, name, class)
+                            .map_or("-".to_owned(), |r| fmt_rate(r.4, r.5, r.6))
+                    })
+                    .collect();
+                let _ = writeln!(s, "| {}% | {name} | {} |", pct(ppm), cells.join(" | "));
+            }
+        }
+        let _ = writeln!(s);
+    }
+    let mut violations = Vec::new();
+    for r in &det {
+        for later in det.iter().filter(|o| o.2 == r.2 && o.3 == r.3) {
+            let next_time = later.0 == r.0
+                && OBSERVE_MS
+                    .windows(2)
+                    .any(|w| w[0] == r.1 && w[1] == later.1);
+            let next_amp = later.1 == r.1
+                && AMPLITUDES_PPM
+                    .windows(2)
+                    .any(|w| w[0] == r.0 && w[1] == later.0);
+            if (next_time || next_amp) && later.4 < r.4 && later.6 < r.5 {
+                violations.push(format!(
+                    "{} ({}) at {}% {} s -> {}% {} s",
+                    r.3.name(),
+                    r.2,
+                    pct(r.0),
+                    secs(r.1),
+                    pct(later.0),
+                    secs(later.1)
+                ));
+            }
+        }
+    }
+    let _ = writeln!(
+        s,
+        "Monotonicity, same tolerance as above (a fall with non-overlapping 95% intervals):\n"
+    );
+    if violations.is_empty() {
+        let _ = writeln!(s, "No violations.\n");
+    } else {
+        for v in &violations {
+            let _ = writeln!(s, "- {v}");
+        }
+        let _ = writeln!(s);
+    }
+    let _ = writeln!(
+        s,
+        "### Time to detection, every statistic (sequential, 15-minute horizon)\n"
+    );
+    let _ = writeln!(
+        s,
+        "Each statistic's sequential threshold at {}% ÷ the number of statistics, on the simulated humans' highest score over 15 minutes.\n",
+        args.fpr * 100.0
+    );
+    let _ = writeln!(
+        s,
+        "| Amplitude | Class | Human FPR (measured) | Flagged within 15 min | Median engagements | 90th pct engagements | Median matches |\n|---|---|---|---|---|---|---|"
+    );
+    for r in &ttd {
+        let _ = writeln!(
+            s,
+            "| {}% | {} | {:.2}% | {:.1}% | {:.0} | {:.0} | {:.2} |",
+            pct(r.0),
+            r.1.name(),
+            r.2 * 100.0,
+            r.3 * 100.0,
+            r.4,
+            r.5,
+            r.4 / args.per_match
+        );
+    }
+    let _ = writeln!(s);
+    let _ = writeln!(s, "### Evidence of the new statistics\n");
+    let _ = writeln!(
+        s,
+        "Medians per class; for humans, also the 99th and 99.9th percentiles of κ, which the κ bound must sit above.\n"
+    );
+    let _ = writeln!(
+        s,
+        "| Amplitude | Observe | Statistic | Class | Pairs | Slope | Residual sd (deg) | κ (1/deg) | κ p99 | κ p99.9 | z |\n|---|---|---|---|---|---|---|---|---|---|---|"
+    );
+    for (ppm, ms, name, class, r) in &ev_rows {
+        let _ = writeln!(
+            s,
+            "| {}% | {} s | {name} | {} | {:.0} | {:+.3} | {:.4} | {:.2} | {:.2} | {:.2} | {:+.1} |",
+            pct(*ppm),
+            secs(*ms),
+            class.name(),
+            r.0,
+            r.1,
+            r.2,
+            r.3,
+            r.4,
+            r.5,
+            r.6
+        );
+    }
+    let _ = writeln!(s);
+    Ok(s)
 }
 
 /// (amplitude ppm, observation ms, statistic, class, ROC points (fpr, tpr)).

@@ -38,6 +38,29 @@
 //! frame, faster than any visual reaction. Its null is zero correlation; the statistic
 //! is `z = -atanh(r) · sqrt(n - 3)`, positive when the ratio falls with the drift.
 //!
+//! **Drift-change statistic ([`Report::change`], flick, task 1.3a).** A cheat that
+//! knows a drift exists can measure the multiplier its own last move produced and
+//! divide the next move by it. Its error is then not the drift's whole effect but the
+//! drift's *change* since that measurement. For each shot, with `N` the nominal view
+//! change and `D` the drift's effect since the previous shot, and `d_prev` the drift
+//! (multiplier - 1) averaged along the path of the moves before the previous shot,
+//! the error is paired with `D + N·d_prev`: what a drift-learner that measured the last
+//! movement would still get wrong. The null is again a kappa bound, with its own value.
+//!
+//! **Per-shot spray statistic ([`Report::spray`], task 1.3a).** Within a spray burst,
+//! each shot's change in error since the previous shot is paired with what a
+//! fixed-pattern recoil macro would get wrong over that interval: the nominal kick
+//! times (sensitivity multiplier - recoil multiplier). A macro that cancels each kick
+//! by the exact nominal counts has exactly that error, with only tremor and rounding
+//! beside it; a human's learned, per-shot correction is much noisier. That gives about
+//! 29 pairs per axis per burst, where the fire-time statistic has one. The regressor
+//! uses only the recoil records and the probe, never the player's own moves: the
+//! drift's effect on a noisy pull would put the same noise into both sides of the fit.
+//! The recoil pattern is the same in every burst, so the fit also removes a separate
+//! mean per axis and burst shot: a player's habitual error on one kick (or a macro's
+//! rounding) repeats every burst and carries no drift. The null is a kappa bound with
+//! its own value.
+//!
 //! **Scores.** Each statistic gives a signed generalised log-likelihood ratio,
 //! `score = sign(z) · z² / 2` (the Gaussian GLR for a one-sided shift), and a
 //! confidence `Φ(z)`. Evidence is kept per window of telemetry time and for the whole
@@ -66,6 +89,29 @@ pub struct DetectorConfig {
     pub window_ms: u64,
     /// Shortest per-frame step, in counts, that the step-response statistic uses.
     pub min_step_counts: f64,
+    /// Drift-change statistic (flick). Absent: not computed.
+    #[serde(default)]
+    pub change: Option<KappaTest>,
+    /// Per-shot spray statistic. Absent: not computed.
+    #[serde(default)]
+    pub spray: Option<KappaTest>,
+}
+
+/// Null hypothesis and flag score of a kappa-bound statistic.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KappaTest {
+    /// Largest drift gain per degree of residual error a closed-loop player is assumed
+    /// to show on this statistic's pairs, 1/deg.
+    pub kappa_bound: f64,
+    /// Score at or above which evidence is flagged.
+    pub flag_score: f64,
+}
+
+impl KappaTest {
+    fn valid(&self) -> bool {
+        self.kappa_bound.is_finite() && self.kappa_bound >= 0.0 && self.flag_score.is_finite()
+    }
 }
 
 impl DetectorConfig {
@@ -77,7 +123,9 @@ impl DetectorConfig {
             && self.min_pairs >= 4
             && self.window_ms > 0
             && self.min_step_counts.is_finite()
-            && self.min_step_counts >= 1.0;
+            && self.min_step_counts >= 1.0
+            && self.change.is_none_or(|t| t.valid())
+            && self.spray.is_none_or(|t| t.valid());
         if ok { Ok(()) } else { Err(DetectError::Config) }
     }
 }
@@ -144,13 +192,52 @@ impl Moments {
     }
 }
 
-/// Which null hypothesis a statistic tests.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Groups per axis for the per-shot spray statistic: one per burst shot, with every
+/// shot from the last group on pooled into it.
+const SPRAY_GROUPS: usize = 32;
+
+/// Running sums for a least-squares fit of `y` on `x` with a separate mean per group
+/// (a fixed-effects fit): per axis and burst shot, for the per-shot spray statistic.
+/// Removing each group's mean removes anything the same in every burst, such as a
+/// player's habitual over- or under-compensation of one kick, or a macro's rounding.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Grouped([[Moments; SPRAY_GROUPS]; 2]);
+
+impl Grouped {
+    fn add(&mut self, axis: usize, group: usize, x: f64, y: f64) {
+        self.0[axis][group.min(SPRAY_GROUPS - 1)].add(x, y);
+    }
+
+    fn evidence(&self, null: Null, min_pairs: u64, span: (u64, u64)) -> Evidence {
+        let (mut pairs, mut groups) = (0u64, 0u64);
+        let (mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0);
+        for m in self.0.iter().flatten().filter(|m| m.n > 0) {
+            let (vx, vy, cxy) = m.central();
+            let n = m.n as f64;
+            pairs += m.n;
+            groups += 1;
+            sxx += vx * n;
+            syy += vy * n;
+            sxy += cxy * n;
+        }
+        // One degree of freedom per group mean beyond the first.
+        let n = pairs as f64 - groups.saturating_sub(1) as f64;
+        let central = if n > 0.0 {
+            (sxx / n, syy / n, sxy / n)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
+        Evidence::from_central(pairs, n, central, null, min_pairs, span)
+    }
+}
+
+/// Which null hypothesis a statistic tests, and its flag score.
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Null {
-    /// Fire time: kappa at most the bound, alternative "larger".
-    KappaBound,
-    /// Step response: zero correlation, alternative "negative".
-    NoResponse,
+    /// Kappa at most `bound`, alternative "larger".
+    KappaBound { bound: f64, flag: f64 },
+    /// Zero correlation, alternative "negative".
+    NoResponse { flag: f64 },
 }
 
 /// Evidence from one statistic over one span of telemetry.
@@ -184,17 +271,26 @@ pub struct Evidence {
 }
 
 impl Evidence {
-    fn from_moments(
-        m: &Moments,
+    fn from_moments(m: &Moments, null: Null, min_pairs: u64, start_ms: u64, end_ms: u64) -> Self {
+        let span = (start_ms, end_ms);
+        Self::from_central(m.n, m.n as f64, m.central(), null, min_pairs, span)
+    }
+
+    /// Evidence from `pairs` pairs with central moments (variance of x, variance of y,
+    /// covariance) divided by `n`, the sample size the fit's degrees of freedom count
+    /// (`pairs` for one group; fewer after removing group means).
+    fn from_central(
+        pairs: u64,
+        n: f64,
+        (vx, vy, cxy): (f64, f64, f64),
         null: Null,
-        config: &DetectorConfig,
-        start_ms: u64,
-        end_ms: u64,
+        min_pairs: u64,
+        (start_ms, end_ms): (u64, u64),
     ) -> Self {
         let mut e = Self {
             start_ms,
             end_ms,
-            pairs: m.n,
+            pairs,
             r: 0.0,
             slope: 0.0,
             slope_se: 0.0,
@@ -205,14 +301,9 @@ impl Evidence {
             confidence: 0.5,
             flagged: false,
         };
-        if m.n < config.min_pairs.max(4) {
+        if pairs < min_pairs.max(4) || n < 4.0 || vx <= 0.0 || vy <= 0.0 {
             return e;
         }
-        let (vx, vy, cxy) = m.central();
-        if vx <= 0.0 || vy <= 0.0 {
-            return e;
-        }
-        let n = m.n as f64;
         let r = (cxy / libm::sqrt(vx * vy)).clamp(-0.999_999, 0.999_999);
         let slope = cxy / vx;
         let residual_var = (vy - slope * cxy).max(0.0) * n / (n - 2.0);
@@ -227,20 +318,20 @@ impl Evidence {
             f64::INFINITY
         };
         let root = libm::sqrt(n - 3.0);
-        e.z = match null {
-            Null::KappaBound => {
-                let k = config.kappa_bound * libm::sqrt(vx);
+        let flag = match null {
+            Null::KappaBound { bound, flag } => {
+                let k = bound * libm::sqrt(vx);
                 let rho0 = k / libm::sqrt(1.0 + k * k);
-                (libm::atanh(r) - libm::atanh(rho0.min(0.999_999))) * root
+                e.z = (libm::atanh(r) - libm::atanh(rho0.min(0.999_999))) * root;
+                flag
             }
-            Null::NoResponse => -libm::atanh(r) * root,
+            Null::NoResponse { flag } => {
+                e.z = -libm::atanh(r) * root;
+                flag
+            }
         };
         e.score = e.z.signum() * e.z * e.z / 2.0;
         e.confidence = normal_cdf(e.z);
-        let flag = match null {
-            Null::KappaBound => config.error_flag_score,
-            Null::NoResponse => config.steps_flag_score,
-        };
         e.flagged = e.score >= flag;
         e
     }
@@ -251,13 +342,17 @@ fn normal_cdf(z: f64) -> f64 {
     0.5 * libm::erfc(-z / core::f64::consts::SQRT_2)
 }
 
-/// Both statistics over one span.
+/// Every statistic over one span.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Report {
     /// Fire-time drift correlation.
     pub error: Evidence,
     /// Per-frame step response.
     pub steps: Evidence,
+    /// Fire-time drift change (flick). Neutral when not configured.
+    pub change: Evidence,
+    /// Per-shot spray response. Neutral when not configured.
+    pub spray: Evidence,
     /// Shots seen.
     pub shots: u64,
     /// Engagements seen: flick targets, or spray bursts.
@@ -267,10 +362,21 @@ pub struct Report {
 }
 
 impl Report {
-    /// Whether either statistic is flagged.
+    /// Whether any statistic is flagged.
     #[must_use]
     pub fn flagged(&self) -> bool {
-        self.error.flagged || self.steps.flagged
+        self.error.flagged || self.steps.flagged || self.change.flagged || self.spray.flagged
+    }
+
+    /// Every statistic's evidence, with its name: `error`, `steps`, `change`, `spray`.
+    #[must_use]
+    pub fn statistics(&self) -> [(&'static str, &Evidence); 4] {
+        [
+            ("error", &self.error),
+            ("steps", &self.steps),
+            ("change", &self.change),
+            ("spray", &self.spray),
+        ]
     }
 }
 
@@ -278,6 +384,8 @@ impl Report {
 struct Span {
     error: Moments,
     steps: Moments,
+    change: Moments,
+    spray: Grouped,
     shots: u64,
     engagements: u64,
     angle_mismatches: u64,
@@ -285,9 +393,36 @@ struct Span {
 
 impl Span {
     fn report(&self, config: &DetectorConfig, start_ms: u64, end_ms: u64) -> Report {
+        let evidence =
+            |m: &Moments, null| Evidence::from_moments(m, null, config.min_pairs, start_ms, end_ms);
+        let kappa = |t: Option<KappaTest>| {
+            let t = t.unwrap_or(KappaTest {
+                kappa_bound: 0.0,
+                flag_score: f64::INFINITY,
+            });
+            Null::KappaBound {
+                bound: t.kappa_bound,
+                flag: t.flag_score,
+            }
+        };
         Report {
-            error: Evidence::from_moments(&self.error, Null::KappaBound, config, start_ms, end_ms),
-            steps: Evidence::from_moments(&self.steps, Null::NoResponse, config, start_ms, end_ms),
+            error: evidence(
+                &self.error,
+                Null::KappaBound {
+                    bound: config.kappa_bound,
+                    flag: config.error_flag_score,
+                },
+            ),
+            steps: evidence(
+                &self.steps,
+                Null::NoResponse {
+                    flag: config.steps_flag_score,
+                },
+            ),
+            change: evidence(&self.change, kappa(config.change)),
+            spray: self
+                .spray
+                .evidence(kappa(config.spray), config.min_pairs, (start_ms, end_ms)),
             shots: self.shots,
             engagements: self.engagements,
             angle_mismatches: self.angle_mismatches,
@@ -335,6 +470,16 @@ pub struct Detector {
     offset_at_engagement: [f64; 2],
     burst_first: Option<([f64; 2], [f64; 2])>,
     burst_last: Option<([f64; 2], [f64; 2])>,
+    // Drift change: nominal view and drift effect at the previous shot, the path-
+    // weighted drift of the moves since then (sum of weight x drift, sum of weight),
+    // and that average over the moves before the previous shot.
+    segment_start: ([f64; 2], [f64; 2]),
+    segment_drift: (f64, f64),
+    previous_segment_drift: Option<f64>,
+    // Per-shot spray: (burst shot, error) of the burst's previous shot, and the
+    // macro-error regressor accumulated since then.
+    spray_last: Option<(u32, [f64; 2])>,
+    spray_drift: [f64; 2],
     // Step response.
     open_frame: Option<FrameStep>,
     previous_step: Option<FrameStep>,
@@ -368,6 +513,11 @@ impl Detector {
             offset_at_engagement: [0.0, 0.0],
             burst_first: None,
             burst_last: None,
+            segment_start: ([0.0, 0.0], [0.0, 0.0]),
+            segment_drift: (0.0, 0.0),
+            previous_segment_drift: None,
+            spray_last: None,
+            spray_drift: [0.0, 0.0],
             open_frame: None,
             previous_step: None,
             total: Span::default(),
@@ -454,11 +604,19 @@ impl Detector {
                 let k = self.multiplier(Stream::Sensitivity, ts, session);
                 let delta = [-m.dx * session.deg_per_count, -m.dy * session.deg_per_count];
                 self.apply(delta, k);
+                let weight = libm::sqrt(delta[0] * delta[0] + delta[1] * delta[1]);
+                self.segment_drift.0 += weight * (k - 1.0);
+                self.segment_drift.1 += weight;
                 self.track_step(m.frame, [m.dx, m.dy], k - 1.0);
             }
             Record::Recoil(r) => {
                 let k = self.multiplier(Stream::Recoil, ts, session);
                 self.apply([r.kick_yaw, r.kick_pitch], k);
+                if self.config.spray.is_some() {
+                    let ks = self.multiplier(Stream::Sensitivity, ts, session);
+                    self.spray_drift[0] += r.kick_yaw * (ks - k);
+                    self.spray_drift[1] += r.kick_pitch * (ks - k);
+                }
             }
             Record::Target(_) => {
                 self.close_burst(session);
@@ -545,6 +703,9 @@ impl Detector {
                     offset[1] - self.offset_at_engagement[1],
                 ];
                 self.add_error_pair(drift, error);
+                if self.config.change.is_some() {
+                    self.drift_change(error, offset);
+                }
             }
             Scenario::Spray => {
                 if f.burst_shot == 0 {
@@ -553,9 +714,44 @@ impl Detector {
                     self.count_engagement();
                 }
                 self.burst_last = Some((error, offset));
+                if self.config.spray.is_some() {
+                    if let Some((shot, e0)) = self.spray_last
+                        && shot + 1 == f.burst_shot
+                    {
+                        let group = f.burst_shot as usize;
+                        for axis in 0..2 {
+                            let x = self.spray_drift[axis];
+                            let y = error[axis] - e0[axis];
+                            self.total.spray.add(axis, group, x, y);
+                            self.window.spray.add(axis, group, x, y);
+                        }
+                    }
+                    self.spray_last = Some((f.burst_shot, error));
+                    self.spray_drift = [0.0, 0.0];
+                }
             }
             Scenario::Other => {}
         }
+    }
+
+    /// One drift-change pair per axis for this shot, then starts the next segment.
+    fn drift_change(&mut self, error: [f64; 2], offset: [f64; 2]) {
+        let (start_nominal, start_offset) = self.segment_start;
+        if let Some(previous) = self.previous_segment_drift {
+            for axis in 0..2 {
+                let nominal = self.nominal[axis] - start_nominal[axis];
+                let effect = offset[axis] - start_offset[axis];
+                let x = effect + nominal * previous;
+                self.total.change.add(x, error[axis]);
+                self.window.change.add(x, error[axis]);
+            }
+        }
+        let (sum, weight) = self.segment_drift;
+        if weight > 0.0 {
+            self.previous_segment_drift = Some(sum / weight);
+        }
+        self.segment_start = (self.nominal, offset);
+        self.segment_drift = (0.0, 0.0);
     }
 
     /// One pair per spray burst: change of error against change of drift effect.
@@ -573,6 +769,8 @@ impl Detector {
         }
         self.burst_first = None;
         self.burst_last = None;
+        self.spray_last = None;
+        self.spray_drift = [0.0, 0.0];
     }
 
     fn track_step(&mut self, frame: u64, counts: [f64; 2], drift: f64) {

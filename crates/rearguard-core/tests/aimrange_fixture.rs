@@ -32,6 +32,8 @@ fn config() -> DetectorConfig {
         min_pairs: 20,
         window_ms: 1_000,
         min_step_counts: 100.0,
+        change: None,
+        spray: None,
     }
 }
 

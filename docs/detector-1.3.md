@@ -5,6 +5,10 @@ For: PM, to ratify the provisional Phase 1 targets. Full tables and plots:
 `roc-steps.svg`, and the CSV files beside them. Code: `rearguard_core::detect` (the
 detector) and `rearguard-sim`'s `rearguard-eval` (the evaluation).
 
+> Follow-up: task 1.3a added two statistics for the weak cases below (the recoil macro,
+> and the adaptive aimbots at high amplitude). See [`detector-1.3a.md`](detector-1.3a.md).
+> This note is otherwise as written for task 1.3.
+
 > Every number here comes from **simulated** players. The human model is unfitted, and
 > the cheat models are ours. Treat them as a statement about the detector against these
 > models, not a forecast for real players. Real-player validation is task 1.10.

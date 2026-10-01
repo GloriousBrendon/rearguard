@@ -1,0 +1,16 @@
+{
+  "kappa_bound": 2.0,
+  "error_flag_score": 12.0,
+  "steps_flag_score": 12.0,
+  "min_pairs": 20,
+  "window_ms": 30000,
+  "min_step_counts": 100.0,
+  "change": {
+    "kappa_bound": 2.0,
+    "flag_score": 12.0
+  },
+  "spray": {
+    "kappa_bound": 15.0,
+    "flag_score": 12.0
+  }
+}

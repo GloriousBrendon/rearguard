@@ -202,11 +202,19 @@ server would (telemetry plus the player's epoch seed), and writes:
 - times to detection;
 - the slope-versus-significance comparison;
 - the step-response results against the smoothing aimbot;
-- calibrated thresholds and a summary.
+- calibrated thresholds and a summary;
+- when the configuration enables the task-1.3a statistics (`change`, `spray`), their
+  detection rates alone and with every statistic together (`detection-1.3a.csv`), times
+  to detection with every statistic (`ttd-1.3a.csv`), their evidence
+  (`evidence-1.3a.csv`), and a summary section. These use their own bootstrap stream,
+  so every task-1.3 output is byte-identical to a run without them.
 
 ```sh
 cargo run --release -p rearguard-sim --bin rearguard-eval -- \
   --config crates/rearguard-sim/eval/detector-1.3.json --out docs/results/detector-1.3 --seed 20260930
+# Task 1.3a: the same command, with the configuration that enables the new statistics.
+cargo run --release -p rearguard-sim --bin rearguard-eval -- \
+  --config crates/rearguard-sim/eval/detector-1.3a.json --out docs/results/detector-1.3a --seed 20260930
 ```
 
 | Option | Default | Meaning |
@@ -222,8 +230,9 @@ cargo run --release -p rearguard-sim --bin rearguard-eval -- \
 | `--threads N` | all cores | Worker threads; the output does not depend on it |
 
 Each session is 15 minutes, scored at 30 s, 2 min, 5 min and 15 min, at drift
-amplitudes of 0.25, 0.5, 1 and 2%. The committed results and the assumptions note are in
-`docs/results/detector-1.3/` and `docs/detector-1.3.md`.
+amplitudes of 0.25, 0.5, 1 and 2%. The committed results and the assumptions notes are in
+`docs/results/detector-1.3/` and `docs/detector-1.3.md`, and for task 1.3a in
+`docs/results/detector-1.3a/` and `docs/detector-1.3a.md`.
 
 ## Tests
 

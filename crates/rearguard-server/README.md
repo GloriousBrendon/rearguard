@@ -125,11 +125,13 @@ Either way, the final evidence and verdict are stored.
 | Table | Holds |
 |-------|-------|
 | `sessions` | Id, `match_id`, `player_id`, amplitude, client name, ground-truth `label` (test environment only; NULL otherwise), status, created/ended time, record count |
-| `evidence` | Per completed 30 s window and for the whole session: both statistics (pairs, r, slope, slope se, residual sd, κ, z, score, confidence, flagged). Windows are written as they complete |
+| `evidence` | Per completed 30 s window and for the whole session: each statistic (pairs, r, slope, slope se, residual sd, κ, z, score, confidence, flagged). Always `error` and `steps`; `change` and `spray` (task 1.3a) once they have pairs, which needs the detector configuration to enable them. Windows are written as they complete |
 | `verdicts` | The final verdict per session: score, confidence, flagged, counts, flagged windows |
 
-The verdict score is the higher of the two statistics' scores (fire-time error and
-step response). The verdict is flagged if either is.
+The verdict score is the highest of the stored statistics' scores (fire-time error and
+step response, plus the task-1.3a statistics when configured). The verdict is flagged if
+any of them is. The wire protocol's verdict still carries only the fire-time and
+step-response evidence in detail.
 
 ## Tests
 

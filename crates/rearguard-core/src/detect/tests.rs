@@ -4,7 +4,7 @@ use proptest::prelude::*;
 
 use super::*;
 use crate::probe::{Amplitude, RootSeed};
-use crate::telemetry::{Button, End, Fire, Header, Move, Target};
+use crate::telemetry::{Button, End, Fire, Header, Move, Recoil, Target};
 
 const DPC: f64 = 0.022;
 
@@ -16,6 +16,14 @@ fn config() -> DetectorConfig {
         min_pairs: 20,
         window_ms: 10_000,
         min_step_counts: 4.0,
+        change: Some(KappaTest {
+            kappa_bound: 2.0,
+            flag_score: 12.0,
+        }),
+        spray: Some(KappaTest {
+            kappa_bound: 15.0,
+            flag_score: 12.0,
+        }),
     }
 }
 
@@ -57,6 +65,31 @@ enum Player {
     OpenLoop,
     /// Flicks, then corrects from the view it actually got, then fires.
     ClosedLoop,
+    /// Flicks by the nominal counts divided by the multiplier its previous flick
+    /// produced (measured from the view), and fires: a drift-learning aimbot.
+    Adaptive,
+}
+
+fn header(scenario: &str) -> Record {
+    Record::Header(Header {
+        ts_us: 0,
+        frame: 0,
+        tick: 0,
+        format: telemetry::FORMAT.to_owned(),
+        version: telemetry::VERSION,
+        match_id: "t".to_owned(),
+        player_id: 1,
+        source: "sim".to_owned(),
+        probe_start_us: 0,
+        deg_per_count: DPC,
+        physics_hz: 120,
+        scenario: scenario.to_owned(),
+        scenario_seed: 0,
+        duration_s: 0.0,
+        recoil_pattern: "v1".to_owned(),
+        target_distance_m: 10.0,
+        target_radius_m: 0.3,
+    })
 }
 
 /// Flick telemetry: `targets` targets 150 ms apart, aimed at a random point on the
@@ -70,27 +103,10 @@ fn flick_session(
 ) -> Vec<Record> {
     let mut probe = ProbeGenerator::new(&seed(1), &probe_config(ppm)).unwrap();
     let mut noise = Noise(noise_seed | 1);
-    let mut records = vec![Record::Header(Header {
-        ts_us: 0,
-        frame: 0,
-        tick: 0,
-        format: telemetry::FORMAT.to_owned(),
-        version: telemetry::VERSION,
-        match_id: "t".to_owned(),
-        player_id: 1,
-        source: "sim".to_owned(),
-        probe_start_us: 0,
-        deg_per_count: DPC,
-        physics_hz: 120,
-        scenario: "flick".to_owned(),
-        scenario_seed: 0,
-        duration_s: 0.0,
-        recoil_pattern: "v1".to_owned(),
-        target_distance_m: 10.0,
-        target_radius_m: 0.3,
-    })];
+    let mut records = vec![header("flick")];
     let mut view = [0.0f64, 0.0];
     let mut frame = 0;
+    let mut estimate = 1.0;
     for i in 0..targets {
         let ts = i * 150_000 + 1_000;
         let target = [noise.uniform() * 80.0 - 40.0, noise.uniform() * 30.0 - 10.0];
@@ -113,10 +129,17 @@ fn flick_session(
         for (t, goal) in moves {
             frame += 1;
             let m = probe.drift(Stream::Sensitivity, t / 1_000).multiplier();
-            let dx = (-(goal[0] - view[0]) / DPC).round();
-            let dy = (-(goal[1] - view[1]) / DPC).round();
+            let gain = if player == Player::Adaptive {
+                estimate
+            } else {
+                1.0
+            };
+            let dx = (-(goal[0] - view[0]) / (DPC * gain)).round();
+            let dy = (-(goal[1] - view[1]) / (DPC * gain)).round();
             view[0] += -dx * DPC * m;
             view[1] = (view[1] - dy * DPC * m).clamp(-89.0, 89.0);
+            // What the adaptive player measures: view change over nominal change.
+            estimate = m;
             records.push(Record::Move(Move {
                 ts_us: t,
                 frame,
@@ -161,6 +184,145 @@ fn flick_session(
         tick: 0,
         shots: targets,
         hits: targets,
+        complete: true,
+    }));
+    records
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Spray {
+    /// Cancels each kick with its exact nominal counts, 10 ms after the shot.
+    Macro,
+    /// Pulls from the view it actually has after the kick, then corrects once more
+    /// from the view that pull gave it.
+    ClosedLoop,
+}
+
+/// Spray telemetry: `bursts` trigger holds of 30 shots, 100 ms apart, at a static
+/// target, under the drift of `seed(1)` at `ppm`. Each compensation also carries a
+/// random move of about half a count (tremor).
+fn spray_session(player: Spray, bursts: u64, ppm: u32, noise_seed: u64) -> Vec<Record> {
+    let mut probe = ProbeGenerator::new(&seed(1), &probe_config(ppm)).unwrap();
+    let mut noise = Noise(noise_seed | 1);
+    let mut records = vec![header("spray")];
+    let target = [0.0, 2.0];
+    let mut view = [0.0f64, 0.0];
+    let (mut frame, mut shot) = (0u64, 0u64);
+    let moved = |probe: &mut ProbeGenerator,
+                 records: &mut Vec<Record>,
+                 view: &mut [f64; 2],
+                 ts: u64,
+                 d: [f64; 2]| {
+        let m = probe.drift(Stream::Sensitivity, ts / 1_000).multiplier();
+        view[0] += -d[0] * DPC * m;
+        view[1] += -d[1] * DPC * m;
+        records.push(Record::Move(Move {
+            ts_us: ts,
+            frame: ts / 8_333,
+            tick: 0,
+            dx: d[0],
+            dy: d[1],
+            yaw: view[0],
+            pitch: view[1],
+        }));
+    };
+    for b in 0..bursts {
+        let mut ts = b * 4_000_000 + 1_000;
+        records.push(Record::Target(Target {
+            ts_us: ts,
+            frame,
+            tick: 0,
+            target: b,
+            target_yaw: target[0],
+            target_pitch: target[1],
+        }));
+        let onto = [
+            (-(target[0] - view[0]) / DPC).round(),
+            (-(target[1] - view[1]) / DPC).round(),
+        ];
+        moved(&mut probe, &mut records, &mut view, ts + 200_000, onto);
+        ts += 500_000;
+        records.push(Record::Button(Button {
+            ts_us: ts,
+            frame,
+            tick: 0,
+            pressed: true,
+        }));
+        for k in 0..30u32 {
+            frame = ts / 8_333;
+            records.push(Record::Fire(Fire {
+                ts_us: ts,
+                frame,
+                tick: 0,
+                shot,
+                burst_shot: k,
+                yaw: view[0],
+                pitch: view[1],
+                target: b,
+                target_yaw: target[0],
+                target_pitch: target[1],
+                hit: true,
+            }));
+            let kick = [
+                0.3 * libm::sin(f64::from(k) / 4.0),
+                1.1 - 0.03 * f64::from(k),
+            ];
+            let mr = probe.drift(Stream::Recoil, ts / 1_000).multiplier();
+            view[0] += kick[0] * mr;
+            view[1] += kick[1] * mr;
+            records.push(Record::Recoil(Recoil {
+                ts_us: ts,
+                frame,
+                tick: 0,
+                shot,
+                burst_shot: k,
+                kick_yaw: kick[0],
+                kick_pitch: kick[1],
+                yaw: view[0],
+                pitch: view[1],
+            }));
+            let pull = match player {
+                // Mouse right (+dx) turns the view right (-yaw); down (+dy) looks down.
+                Spray::Macro => [(kick[0] / DPC).round(), (kick[1] / DPC).round()],
+                Spray::ClosedLoop => [
+                    (-(target[0] - view[0]) / DPC).round(),
+                    (-(target[1] - view[1]) / DPC).round(),
+                ],
+            };
+            let tremor = [
+                (0.5 * noise.normal()).round(),
+                (0.5 * noise.normal()).round(),
+            ];
+            moved(
+                &mut probe,
+                &mut records,
+                &mut view,
+                ts + 10_000,
+                [pull[0] + tremor[0], pull[1] + tremor[1]],
+            );
+            if player == Spray::ClosedLoop {
+                let again = [
+                    (-(target[0] - view[0]) / DPC).round(),
+                    (-(target[1] - view[1]) / DPC).round(),
+                ];
+                moved(&mut probe, &mut records, &mut view, ts + 50_000, again);
+            }
+            shot += 1;
+            ts += 100_000;
+        }
+        records.push(Record::Button(Button {
+            ts_us: ts,
+            frame,
+            tick: 0,
+            pressed: false,
+        }));
+    }
+    records.push(Record::End(End {
+        ts_us: bursts * 4_000_000 + 1_000,
+        frame,
+        tick: 0,
+        shots: shot,
+        hits: shot,
         complete: true,
     }));
     records
@@ -211,6 +373,124 @@ fn no_drift_means_no_evidence() {
     let report = run(&records, 1, 0).session();
     assert_eq!(report.error.score, 0.0);
     assert!(!report.flagged());
+}
+
+// Task 1.3a: the drift-change and per-shot spray statistics.
+
+#[test]
+fn drift_change_catches_a_drift_learning_aimbot() {
+    // At 2%, a player that divides by the multiplier its last flick produced leaves
+    // only the drift's change since then in its error.
+    let records = flick_session(Player::Adaptive, 400, 20_000, 0.01, 3);
+    let report = run(&records, 1, 20_000).session();
+    assert!(report.change.flagged, "{:?}", report.change);
+    assert!(
+        (report.change.slope - 1.0).abs() < 0.1,
+        "{:?}",
+        report.change
+    );
+    assert!(
+        report.change.z > report.error.z,
+        "{:?} {:?}",
+        report.change,
+        report.error
+    );
+    // The drift-learner's error is small next to the whole drift effect.
+    assert!(report.error.slope.abs() < 0.2, "{:?}", report.error);
+    // Plain open-loop players show on it too, but the fire-time statistic stays their
+    // main evidence.
+    let open = run(
+        &flick_session(Player::OpenLoop, 400, 20_000, 0.01, 3),
+        1,
+        20_000,
+    )
+    .session();
+    assert!(open.error.flagged && open.error.z > open.change.z);
+}
+
+#[test]
+fn drift_change_ignores_closed_loop_players_and_no_drift() {
+    let records = flick_session(Player::ClosedLoop, 400, 20_000, 0.2, 7);
+    let report = run(&records, 1, 20_000).session();
+    assert!(!report.change.flagged, "{:?}", report.change);
+    assert!(report.change.score < 0.0, "{:?}", report.change);
+    let records = flick_session(Player::Adaptive, 200, 0, 0.01, 7);
+    let report = run(&records, 1, 0).session();
+    assert_eq!(report.change.score, 0.0);
+    assert!(!report.flagged());
+}
+
+#[test]
+fn per_shot_spray_statistic_catches_a_recoil_macro() {
+    let records = spray_session(Spray::Macro, 20, 20_000, 5);
+    let report = run(&records, 1, 20_000).session();
+    assert_eq!(report.shots, 600);
+    assert_eq!(report.engagements, 20);
+    assert_eq!(report.angle_mismatches, 0);
+    // 29 pairs per axis per burst, against one per axis per burst.
+    assert_eq!(report.spray.pairs, 20 * 29 * 2);
+    assert_eq!(report.error.pairs, 20 * 2);
+    assert!(report.spray.flagged, "{:?}", report.spray);
+    assert!((report.spray.slope - 1.0).abs() < 0.1, "{:?}", report.spray);
+    assert!(report.spray.z > report.error.z);
+    // Flick statistics see nothing in a spray session.
+    assert_eq!(report.change.pairs, 0);
+}
+
+#[test]
+fn per_shot_spray_statistic_ignores_closed_loop_players_and_no_drift() {
+    let report = run(&spray_session(Spray::ClosedLoop, 20, 20_000, 5), 1, 20_000).session();
+    assert!(!report.spray.flagged, "{:?}", report.spray);
+    assert!(report.spray.score < 0.0, "{:?}", report.spray);
+    let report = run(&spray_session(Spray::Macro, 20, 0, 5), 1, 0).session();
+    assert_eq!(report.spray.score, 0.0);
+    assert!(!report.flagged());
+    // Every statistic pairs the replayed view's error with the drift, so it means
+    // something only when the replay reproduces the game's view. Under the wrong seed
+    // it does not, and every shot says so.
+    let report = run(&spray_session(Spray::Macro, 20, 20_000, 5), 2, 20_000).session();
+    assert_eq!(report.angle_mismatches, report.shots);
+}
+
+#[test]
+fn per_shot_spray_fit_removes_what_repeats_every_burst() {
+    // A player whose error on each burst shot has the same bias every burst, and
+    // which is otherwise closed-loop: the bias carries no drift.
+    let mut records = spray_session(Spray::ClosedLoop, 20, 20_000, 5);
+    for r in &mut records {
+        if let Record::Fire(f) = r {
+            let k = f64::from(f.burst_shot);
+            f.target_yaw += 0.2 * libm::cos(k);
+            f.target_pitch += 0.3 * libm::sin(k);
+        }
+    }
+    let report = run(&records, 1, 20_000).session();
+    let plain = run(&spray_session(Spray::ClosedLoop, 20, 20_000, 5), 1, 20_000).session();
+    assert!((report.spray.slope - plain.spray.slope).abs() < 1e-6);
+    assert!((report.spray.residual_sd - plain.spray.residual_sd).abs() < 1e-6);
+}
+
+#[test]
+fn unconfigured_statistics_stay_neutral_and_leave_the_others_unchanged() {
+    let records = spray_session(Spray::Macro, 20, 20_000, 5);
+    let off = DetectorConfig {
+        change: None,
+        spray: None,
+        ..config()
+    };
+    let mut d = Detector::new(&seed(1), &probe_config(20_000), off.clone()).unwrap();
+    d.feed(&records).unwrap();
+    let without = d.session();
+    let with = run(&records, 1, 20_000).session();
+    assert_eq!(without.spray.pairs, 0);
+    assert_eq!(without.spray.score, 0.0);
+    assert!(!without.spray.flagged);
+    assert_eq!(without.error, with.error);
+    assert_eq!(without.steps, with.steps);
+    let flicks = flick_session(Player::Adaptive, 100, 20_000, 0.01, 3);
+    let mut d = Detector::new(&seed(1), &probe_config(20_000), off).unwrap();
+    d.feed(&flicks).unwrap();
+    assert_eq!(d.session().change.pairs, 0);
 }
 
 #[test]
@@ -265,6 +545,20 @@ fn rejects_bad_streams_and_configs() {
             min_step_counts: 0.5,
             ..config()
         },
+        DetectorConfig {
+            change: Some(KappaTest {
+                kappa_bound: -1.0,
+                flag_score: 12.0,
+            }),
+            ..config()
+        },
+        DetectorConfig {
+            spray: Some(KappaTest {
+                kappa_bound: 15.0,
+                flag_score: f64::INFINITY,
+            }),
+            ..config()
+        },
     ] {
         assert!(Detector::new(&seed(1), &probe_config(5_000), bad).is_err());
     }
@@ -273,13 +567,23 @@ fn rejects_bad_streams_and_configs() {
 #[test]
 fn config_is_read_from_json_and_has_no_defaults() {
     let json = r#"{"kappa_bound":2.0,"error_flag_score":12.0,"steps_flag_score":12.0,
-        "min_pairs":20,"window_ms":10000,"min_step_counts":4.0}"#;
+        "min_pairs":20,"window_ms":10000,"min_step_counts":4.0,
+        "change":{"kappa_bound":2.0,"flag_score":12.0},
+        "spray":{"kappa_bound":15.0,"flag_score":12.0}}"#;
     let parsed: DetectorConfig = serde_json::from_str(json).unwrap();
     assert_eq!(parsed, config());
     // Every field is required, and unknown fields are refused.
     assert!(serde_json::from_str::<DetectorConfig>(r#"{"kappa_bound":2.0}"#).is_err());
     let extra = json.replace("\"min_pairs\"", "\"extra\":1,\"min_pairs\"");
     assert!(serde_json::from_str::<DetectorConfig>(&extra).is_err());
+    // The task-1.3a statistics are optional (a 1.3 configuration still reads, and
+    // runs without them), but not partially: both of a test's fields are required.
+    let v13 = r#"{"kappa_bound":2.0,"error_flag_score":12.0,"steps_flag_score":12.0,
+        "min_pairs":20,"window_ms":10000,"min_step_counts":4.0}"#;
+    let parsed: DetectorConfig = serde_json::from_str(v13).unwrap();
+    assert_eq!((parsed.change, parsed.spray), (None, None));
+    let partial = json.replace(r#""flag_score":12.0}}"#, "}}");
+    assert!(serde_json::from_str::<DetectorConfig>(&partial).is_err());
 }
 
 #[test]

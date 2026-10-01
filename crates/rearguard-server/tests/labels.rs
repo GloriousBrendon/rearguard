@@ -45,11 +45,12 @@ fn offline_verdict(server: &TestServer, opened: &Opened, records: &[Record]) -> 
     detector.feed(records).unwrap();
     let s = detector.session();
     let windows = detector.windows();
+    let (score, confidence) = rearguard_server::store::verdict_score(&s);
     VerdictReport {
         session_id: opened.session_id,
         status: SessionStatus::Finished,
-        score: s.error.score.max(s.steps.score),
-        confidence: s.error.confidence.max(s.steps.confidence),
+        score,
+        confidence,
         flagged: s.flagged(),
         records: records.len() as u64,
         shots: s.shots,
